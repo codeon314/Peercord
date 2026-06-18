@@ -6,7 +6,7 @@
   
   **A fully decentralized, peer-to-peer Discord clone powered by Pear Runtime and Hyperswarm.**
 
-  [![License: GPL-v3.0](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+  [![License: GPL-3.0](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
   [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
 </div>
 
