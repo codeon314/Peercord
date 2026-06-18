@@ -1,0 +1,78 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="PeercordInstaller.MainWindow"
+        Title="Peercord Setup" Width="650" Height="450"
+        WindowStartupLocation="CenterScreen"
+        RequestedThemeVariant="Dark"
+        Icon="Assets/app.ico"
+        Background="#121212">
+    <Grid>
+        <!-- Installer UI -->
+        <Grid x:Name="InstallerUI" RowDefinitions="*, Auto">
+            <!-- Content Area -->
+            <Border Grid.Row="0" Background="#1e1e1e" Margin="20" CornerRadius="8" Padding="20">
+                <Grid>
+                    <!-- Step 0: Welcome -->
+                    <StackPanel x:Name="WelcomePage" VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <TextBlock Text="Welcome to the Peercord Setup Wizard" FontSize="26" FontWeight="SemiBold" Foreground="#ffffff" Margin="0,0,0,15" TextAlignment="Center"/>
+                        <TextBlock Text="This wizard will guide you through the installation of Peercord." FontSize="14" Foreground="#cccccc" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="450"/>
+                        <TextBlock Text="Click Next to continue." FontSize="14" Foreground="#cccccc" Margin="0,20,0,0" TextAlignment="Center"/>
+                    </StackPanel>
+
+                    <!-- Step 1: Location -->
+                    <StackPanel x:Name="LocationPage" IsVisible="False" VerticalAlignment="Center" HorizontalAlignment="Stretch">
+                        <TextBlock Text="Choose Installation Location" FontSize="26" FontWeight="SemiBold" Foreground="#ffffff" Margin="0,0,0,15" TextAlignment="Center"/>
+                        <TextBlock Text="Select the folder where Peercord will be installed:" FontSize="14" Foreground="#cccccc" Margin="0,0,0,10"/>
+                        <Grid ColumnDefinitions="*, Auto">
+                            <TextBox x:Name="InstallLocationBox" Grid.Column="0" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                            <Button x:Name="BrowseButton" Grid.Column="1" Content="Browse..." Click="BrowseButton_Click" VerticalAlignment="Center"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- Step 2 & 11: Install / Uninstall Progress -->
+                    <Grid x:Name="InstallPage" IsVisible="False" RowDefinitions="Auto, *, Auto">
+                        <TextBlock x:Name="StatusText" Text="Preparing..." FontSize="16" FontWeight="SemiBold" Foreground="#ffffff" Margin="0,0,0,10"/>
+                        <Border Grid.Row="1" Background="#000000" CornerRadius="4" BorderBrush="#333333" BorderThickness="1">
+                            <ScrollViewer x:Name="LogScrollViewer" Margin="5" HorizontalScrollBarVisibility="Auto">
+                                <SelectableTextBlock x:Name="LogText" FontFamily="Consolas, Courier New, Monospace" FontSize="12" Foreground="#00ff00" TextWrapping="NoWrap"/>
+                            </ScrollViewer>
+                        </Border>
+                        <ProgressBar x:Name="InstallProgress" Grid.Row="2" Height="15" Margin="0,15,0,0" Minimum="0" Maximum="100" Foreground="#0078d7"/>
+                    </Grid>
+
+                    <!-- Step 3: Finish -->
+                    <StackPanel x:Name="FinishPage" IsVisible="False" VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <TextBlock Text="Installation Complete" FontSize="26" FontWeight="SemiBold" Foreground="#ffffff" Margin="0,0,0,15" TextAlignment="Center"/>
+                        <TextBlock Text="Peercord has been successfully installed." FontSize="14" Foreground="#cccccc" TextWrapping="Wrap" TextAlignment="Center"/>
+                        <TextBlock Text="You can now launch it from your desktop shortcut." FontSize="14" Foreground="#cccccc" Margin="0,5,0,0" TextAlignment="Center"/>
+                        
+                        <CheckBox x:Name="DesktopShortcutCheckBox" Content="Create Desktop Shortcut" IsChecked="True" Foreground="#ffffff" Margin="0,20,0,0" HorizontalAlignment="Center"/>
+                        <CheckBox x:Name="MenuShortcutCheckBox" Content="Create Menu Shortcut" IsChecked="True" Foreground="#ffffff" Margin="0,10,0,0" HorizontalAlignment="Center"/>
+                        <CheckBox x:Name="LaunchCheckBox" Content="Launch Peercord on exit" IsChecked="True" Foreground="#ffffff" Margin="0,10,0,0" HorizontalAlignment="Center"/>
+                    </StackPanel>
+
+                    <!-- Step 10: Uninstall Welcome -->
+                    <StackPanel x:Name="UninstallWelcomePage" IsVisible="False" VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <TextBlock Text="Peercord is already installed" FontSize="26" FontWeight="SemiBold" Foreground="#ffffff" Margin="0,0,0,15" TextAlignment="Center"/>
+                        <TextBlock Text="An existing installation of Peercord was detected on your system." FontSize="14" Foreground="#cccccc" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="450"/>
+                        <TextBlock Text="Would you like to uninstall it?" FontSize="14" Foreground="#cccccc" Margin="0,20,0,0" TextAlignment="Center"/>
+                    </StackPanel>
+
+                    <!-- Step 12: Uninstall Finish -->
+                    <StackPanel x:Name="UninstallFinishPage" IsVisible="False" VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <TextBlock Text="Uninstallation Complete" FontSize="26" FontWeight="SemiBold" Foreground="#ffffff" Margin="0,0,0,15" TextAlignment="Center"/>
+                        <TextBlock Text="Peercord has been successfully removed from your computer." FontSize="14" Foreground="#cccccc" TextWrapping="Wrap" TextAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Navigation Area -->
+            <Border Grid.Row="1" Background="#1e1e1e" Padding="20,10">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button x:Name="NextButton" Content="Next" Width="100" HorizontalContentAlignment="Center" Click="NextButton_Click" Background="#0078d7" Foreground="White"/>
+                    <Button x:Name="CancelButton" Content="Cancel" Width="100" HorizontalContentAlignment="Center" Margin="10,0,0,0" Click="CancelButton_Click"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

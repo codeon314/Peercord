@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Peercord</title>
+    <!-- FIX: Changed to absolute path to prevent Vite bundling warning -->
+    <script src="/version.js"></script>
+    <script>
+      // Pear Router: Instantly redirect to compiled UI in the dist folder
+      if (typeof window !== 'undefined' && window.Pear && !window.location.pathname.includes('/dist/')) {
+        window.location.replace(new URL('dist/index.html', window.location.href).href);
+      }
+    </script>
+    <style>
+      /* INSTANT SPLASH SCREEN CSS */
+      #splash { 
+        position: absolute; 
+        inset: 0; 
+        display: flex; 
+        flex-direction: column; 
+        background-color: #313338; 
+        z-index: 9999; 
+        transition: opacity 0.3s ease, visibility 0.3s ease; 
+      }
+      #splash.fade-out { 
+        opacity: 0; 
+        visibility: hidden; 
+      }
+      .dot { 
+        width: 10px; 
+        height: 10px; 
+        border-radius: 50%; 
+        background-color: #5865F2; 
+        animation: bounce 1s infinite; 
+      }
+      @keyframes pulse { 
+        0%, 100% { opacity: 1; transform: scale(1); } 
+        50% { opacity: 0.8; transform: scale(0.95); } 
+      }
+      @keyframes bounce { 
+        0%, 100% { transform: translateY(-25%); animation-timing-function: cubic-bezier(0.8,0,1,1); } 
+        50% { transform: none; animation-timing-function: cubic-bezier(0,0,0.2,1); } 
+      }
+    </style>
+  </head>
+  <body class="bg-[#313338] text-[#dbdee1] m-0 p-0 overflow-hidden">
+    
+    <!-- This renders the exact millisecond the window opens -->
+    <div id="splash">
+      <div style="height: 28px; background-color: #1e1f22; display: flex; align-items: center; padding-left: 12px; font-size: 11px; font-weight: bold; color: #6b7280; letter-spacing: 0.05em; -webkit-app-region: drag; user-select: none;">
+        <img src="./assets/icon.png" alt="Logo" style="width: 16px; height: 16px; border-radius: 50%; margin-right: 8px; object-fit: cover;" />
+        Peercord
+      </div>
+      <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px;">
+        <img src="./assets/icon.png" alt="Malcord Logo" style="width: 96px; height: 96px; border-radius: 24px; animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; object-fit: cover;" />
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
+          <div style="display: flex; gap: 6px;">
+            <div class="dot" style="animation-delay: 0ms;"></div>
+            <div class="dot" style="animation-delay: 150ms;"></div>
+            <div class="dot" style="animation-delay: 300ms;"></div>
+          </div>
+          <div style="color: #9ca3af; font-size: 12px; font-weight: bold; letter-spacing: 0.3em; text-transform: uppercase; margin-top: 8px;">
+            Initializing Swarm
+          </div>
+        </div>
+      </div>
+
+      <!-- Version Indicator -->
+      <div style="position: absolute; bottom: 24px; right: 24px; display: flex; align-items: center; gap: 8px; background-color: rgba(0,0,0,0.2); padding: 4px 10px; border-radius: 9999px; border: 1px solid rgba(255,255,255,0.05);">
+        <div id="splash-version-dot" style="width: 6px; height: 6px; border-radius: 50%; background-color: #5865F2;"></div>
+        <span id="splash-version-text" style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 10px; color: #9ca3af; font-weight: bold; padding-top: 1px;">v1.0.0</span>
+      </div>
+    </div>
+
+    <script>
+      if (typeof window !== 'undefined' && window.APP_VERSION) {
+        document.getElementById('splash-version-text').innerText = 'v' + window.APP_VERSION;
+        const dot = document.getElementById('splash-version-dot');
+        dot.style.backgroundColor = window.APP_VERSION_COLOR;
+        dot.style.boxShadow = '0 0 6px ' + window.APP_VERSION_COLOR;
+      }
+    </script>
+
+    <!-- FILE-BACKED LOCALSTORAGE POLYFILL -->
+    <!-- This completely bypasses Electron's flaky localStorage and writes directly to the OS file system -->
+    <script>
+      if (typeof window !== 'undefined' && window.require) {
+        try {
+          const fs = window.require('fs');
+          const path = window.require('path');
+          const os = window.require('os');
+
+          const home = os.homedir();
+          const appData = process.platform === 'win32' 
+            ? process.env.APPDATA 
+            : (process.platform === 'darwin' ? path.join(home, 'Library', 'Application Support') : path.join(home, '.config'));
+          
+          const dir = path.join(appData || home, 'Peercord');
+          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+          
+          const storagePath = path.join(dir, 'app_storage.json');
+
+          let store = {};
+          let needsMigration = false;
+
+          if (fs.existsSync(storagePath)) {
+            try { store = JSON.parse(fs.readFileSync(storagePath, 'utf-8')); } catch (e) {}
+          } else {
+            // Migrate existing native localStorage data to prevent logging out Windows users
+            try {
+              if (window.localStorage && window.localStorage.length > 0) {
+                for (let i = 0; i < window.localStorage.length; i++) {
+                  const key = window.localStorage.key(i);
+                  store[key] = window.localStorage.getItem(key);
+                }
+                needsMigration = true;
+              }
+            } catch (e) {}
+          }
+
+          let saveTimeout = null;
+          const saveStore = () => {
+            if (saveTimeout) clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(() => {
+              try { fs.writeFileSync(storagePath, JSON.stringify(store, null, 2)); } catch (e) {}
+            }, 100);
+          };
+
+          if (needsMigration) {
+            saveStore();
+            console.log("✅ Migrated existing localStorage to file-based storage.");
+          }
+
+          const customStorage = {
+            getItem: (key) => store.hasOwnProperty(key) ? String(store[key]) : null,
+            setItem: (key, value) => { store[key] = String(value); saveStore(); },
+            removeItem: (key) => { delete store[key]; saveStore(); },
+            clear: () => { store = {}; saveStore(); },
+            key: (i) => Object.keys(store)[i] || null,
+            get length() { return Object.keys(store).length; }
+          };
+
+          try { delete window.localStorage; } catch(e) {}
+          
+          Object.defineProperty(window, 'localStorage', {
+            value: customStorage,
+            configurable: true,
+            enumerable: true,
+            writable: false
+          });
+          
+          console.log("✅ Custom File-Based localStorage initialized at:", storagePath);
+        } catch (err) {
+          console.error("❌ Failed to initialize custom localStorage:", err);
+        }
+      }
+    </script>
+
+    <!-- React will mount the actual app underneath the splash screen -->
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

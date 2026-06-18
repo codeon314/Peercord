@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Default OLED Black & Blue Theme */
+  --color-base: #000000;
+  --color-surface: #0a0a0a;
+  --color-panel: #121212;
+  --color-accent: #5865F2;
+  --color-text: #f3f4f6;
+  --color-muted: #9ca3af;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  background-color: var(--color-base);
+  color: var(--color-text);
+}
+
+.titlebar {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.titlebar-button {
+  -webkit-app-region: no-drag;
+}
+
+/* Global Custom Scrollbar Styling */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-surface) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-surface);
+  border-radius: 4px;
+  border: 1px solid var(--color-base);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-muted);
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@keyframes typing-pulse {
+  0%, 60%, 100% {
+    transform: scale(0.7) translateY(0);
+    background-color: var(--color-muted);
+  }
+  30% {
+    transform: scale(1.2) translateY(-2px);
+    background-color: var(--color-text);
+  }
+}
+
+.typing-dot {
+  animation: typing-pulse 1.2s infinite ease-in-out;
+}
+
+/* Indeterminate Progress Bar Animation */
+@keyframes indeterminate {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+.animate-indeterminate {
+  animation: indeterminate 1.5s infinite linear;
+}

@@ -1,0 +1,13 @@
+{
+  "name": "p2p-discord-clone",
+  "type": "desktop",
+  "main": "index.js",
+  "gui": {
+    "main": "dist/index.html",
+    "frame": false,
+    "resizable": true,
+    "maximizable": true,
+    "thickFrame": true
+  },
+  "pre": "pear-electron/pre"
+}

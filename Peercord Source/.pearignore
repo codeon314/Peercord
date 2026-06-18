@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Source Files (Since you use Vite to build to /dist)
+src/
+public/
+
+# Build Artifacts
+# Note: Do NOT ignore /dist if your app runs from there
+# but DO ignore it if you are staging the root index.js
+# and don't want redundant build files included.
+release/
+*.log
+
+# Git and IDE
+.git/
+.vscode/
+.gitignore
+.pearignore
