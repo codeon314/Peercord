@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 export default function ScreenShareModal({ onClose, onStart }) {
   const[resolution, setResolution] = useState('1080');
   const [fps, setFps] = useState('60');
+  const [shareAudio, setShareAudio] = useState(false);
   
   const[activeTab, setActiveTab] = useState('screens');
   const[sources, setSources] = useState({ screens:[], windows: [] });
@@ -57,7 +58,7 @@ export default function ScreenShareModal({ onClose, onStart }) {
     const selectedRes = resolutions.find(r => r.value === resolution);
     const sourceId = useNativePicker ? 'native' : selectedSource;
     if (!sourceId) return;
-    onStart(sourceId, selectedRes, parseInt(fps));
+    onStart(sourceId, selectedRes, parseInt(fps), shareAudio);
   };
 
   return (
@@ -159,6 +160,21 @@ export default function ScreenShareModal({ onClose, onStart }) {
                   <option key={f.value} value={f.value}>{f.label}</option>
                 ))}
               </select>
+            </div>
+
+            <div className="pt-2 border-t border-surface">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={shareAudio} 
+                  onChange={(e) => setShareAudio(e.target.checked)}
+                  className="w-5 h-5 accent-accent"
+                />
+                <span className="text-sm font-bold text-text">Share System Audio</span>
+              </label>
+              <p className="text-[10px] text-muted mt-1 ml-8">
+                Broadcasts your computer's audio along with the screen. (May not be supported on all OS/Window types).
+              </p>
             </div>
 
           </div>

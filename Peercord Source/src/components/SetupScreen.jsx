@@ -31,6 +31,16 @@ export default function SetupScreen({ setProfile }) {
     localStorage.setItem('pear_saved_accounts', JSON.stringify(accounts));
   };
 
+  const handleDeleteSavedAccount = (e, seedHex) => {
+    e.stopPropagation();
+    if (window.confirm("Are you sure you want to remove this saved account?")) {
+      const updated = savedAccounts.filter(a => a.seedHex !== seedHex);
+      setSavedAccounts(updated);
+      localStorage.setItem('pear_saved_accounts', JSON.stringify(updated));
+      if (updated.length === 0) setView('signup');
+    }
+  };
+
   const handleSignup = async (e) => {
     e.preventDefault();
     if (!displayName.trim() || !username.trim() || !seedAcknowledged) return;
@@ -77,7 +87,6 @@ export default function SetupScreen({ setProfile }) {
       sodium.crypto_sign_seed_keypair(realPubKey, realSecKey, seedBuf);
       const realPubKeyHex = b4a.toString(realPubKey, 'hex');
 
-      // FIX: Added ephemeral: true to prevent this background swarm from exhausting the router NAT table
       const tempSwarm = new Hyperswarm({ ephemeral: true });
       const syncTopic = b4a.alloc(32);
       sodium.crypto_generichash(syncTopic, b4a.from('peercord-sync:' + realPubKeyHex));
@@ -119,21 +128,27 @@ export default function SetupScreen({ setProfile }) {
           }
         });
 
-        channel.open();
+        const sendReq = () => {
+          try {
+            appMessage.send({
+              type: 'ephemeral',
+              payload: {
+                type: 'account_sync_request',
+                tempKey: tempKeyHex,
+                signature: b4a.toString(sigBuf, 'hex')
+              }
+            });
+          } catch (e) {}
+        };
+
+        if (channel.opened) sendReq();
+        else channel.on('open', sendReq);
         
-        try {
-          appMessage.send({
-            type: 'ephemeral',
-            payload: {
-              type: 'account_sync_request',
-              tempKey: tempKeyHex,
-              signature: b4a.toString(sigBuf, 'hex')
-            }
-          });
-        } catch (e) {}
+        channel.open();
       });
 
       tempSwarm.join(syncTopic, { client: true, server: false });
+      tempSwarm.flush().catch(()=>{});
 
       setTimeout(() => {
         if (!synced) {
@@ -193,15 +208,24 @@ export default function SetupScreen({ setProfile }) {
                 <div 
                   key={i} 
                   onClick={() => handleSavedLogin(acc)}
-                  className="flex items-center gap-3 p-3 bg-panel hover:bg-base rounded cursor-pointer transition-colors border border-surface"
+                  className="flex items-center justify-between p-3 bg-panel hover:bg-base rounded cursor-pointer transition-colors border border-surface group"
                 >
-                  <div className="w-10 h-10 rounded-md bg-indigo-500 flex items-center justify-center text-white font-bold overflow-hidden shrink-0">
-                    {acc.avatar ? <img src={acc.avatar} className="w-full h-full object-cover" /> : acc.displayName.substring(0, 2).toUpperCase()}
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    <div className="w-10 h-10 rounded-md bg-indigo-500 flex items-center justify-center text-white font-bold overflow-hidden shrink-0">
+                      {acc.avatar ? <img src={acc.avatar} className="w-full h-full object-cover" /> : acc.displayName.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div className="flex flex-col overflow-hidden">
+                      <span className="text-text font-bold truncate">{acc.displayName}</span>
+                      <span className="text-xs text-muted truncate">@{acc.username}</span>
+                    </div>
                   </div>
-                  <div className="flex flex-col overflow-hidden">
-                    <span className="text-text font-bold truncate">{acc.displayName}</span>
-                    <span className="text-xs text-muted truncate">@{acc.username}</span>
-                  </div>
+                  <button 
+                    onClick={(e) => handleDeleteSavedAccount(e, acc.seedHex)}
+                    className="w-8 h-8 rounded flex items-center justify-center text-muted hover:text-red-500 hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
+                    title="Remove saved account"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                  </button>
                 </div>
               ))}
             </div>

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { network } from '../p2p/index.js';
 import ScreenShareModal from './ScreenShareModal.jsx';
 
-const VideoPlayer = ({ stream, muted, isAudioOnly }) => {
+const VideoPlayer = ({ stream, muted, deafened, isAudioOnly }) => {
   const ref = useRef();
   useEffect(() => {
     if (ref.current && stream) {
@@ -15,13 +15,14 @@ const VideoPlayer = ({ stream, muted, isAudioOnly }) => {
   }, [stream]);
   
   if (isAudioOnly) {
-    return <audio ref={ref} autoPlay muted={muted} className="hidden" />;
+    return <audio ref={ref} autoPlay muted={muted || deafened} className="hidden" />;
   }
-  return <video ref={ref} autoPlay playsInline muted={muted} className="w-full h-full object-cover" />;
+  return <video ref={ref} autoPlay playsInline muted={muted || deafened} className="w-full h-full object-cover" />;
 };
 
 export default function GroupCallView({ channel, serverTopicHex, vcChannelId, myKey, myProfile, knownUsers, onClose, onToggleChat, onLocalStateChange, className, initialVideoOn }) {
   const [isMuted, setIsMuted] = useState(false);
+  const [isDeafened, setIsDeafened] = useState(false);
   const [isVideoOn, setIsVideoOn] = useState(initialVideoOn || false);
   const [localVoiceActive, setLocalVoiceActive] = useState(false);
   const [showScreenShareModal, setShowScreenShareModal] = useState(false);
@@ -45,33 +46,37 @@ export default function GroupCallView({ channel, serverTopicHex, vcChannelId, my
 
   // Broadcast VC state to the server swarm if this is a server VC
   useEffect(() => {
-    if (serverTopicHex && vcChannelId) {
-      const broadcastState = () => {
-        network.sendEphemeral({
-          type: 'vc-state',
-          serverTopicHex,
-          channel: vcChannelId,
-          muted: isMuted,
-          screenshare: isScreenSharing
-        });
-        if (onLocalStateChange) onLocalStateChange(isMuted, isScreenSharing);
-      };
-      
-      broadcastState(); // Initial broadcast
-      const interval = setInterval(broadcastState, 10000);
-      
-      return () => {
-        clearInterval(interval);
-        // Leave is handled by onClose in MainApp, but we also send it here on unmount just in case
-        network.sendEphemeral({
-          type: 'vc-leave',
-          serverTopicHex,
-          channel: vcChannelId
-        });
-      };
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[serverTopicHex, vcChannelId, isMuted, isScreenSharing]);
+    if (!serverTopicHex || !vcChannelId) return;
+    
+    const broadcastState = () => {
+      network.sendEphemeral({
+        type: 'vc-state',
+        serverTopicHex,
+        channel: vcChannelId,
+        muted: isMuted,
+        deafened: isDeafened,
+        screenshare: isScreenSharing
+      });
+      if (onLocalStateChange) onLocalStateChange(isMuted, isDeafened, isScreenSharing);
+    };
+    
+    broadcastState(); // Initial broadcast
+    const interval = setInterval(broadcastState, 4000); // Broadcast every 4 seconds
+    
+    return () => clearInterval(interval);
+  }, [serverTopicHex, vcChannelId, isMuted, isDeafened, isScreenSharing]);
+
+  // Send leave ONLY on unmount or channel change
+  useEffect(() => {
+    if (!serverTopicHex || !vcChannelId) return;
+    return () => {
+      network.sendEphemeral({
+        type: 'vc-leave',
+        serverTopicHex,
+        channel: vcChannelId
+      });
+    };
+  }, [serverTopicHex, vcChannelId]);
 
   const sendSignal = (targetKey, signal) => {
     network.sendWebRTCSignal(targetKey, { type: 'webrtc-group-signal', channel, target: targetKey, signal });
@@ -335,11 +340,35 @@ export default function GroupCallView({ channel, serverTopicHex, vcChannelId, my
   },[channel, myKey]);
 
   const toggleMute = () => {
+    if (isDeafened) return; // Cannot unmute while deafened
     if (localStreamRef.current) {
       const audioTrack = localStreamRef.current.getAudioTracks()[0];
       if (audioTrack) {
         audioTrack.enabled = !audioTrack.enabled;
         setIsMuted(!audioTrack.enabled);
+      }
+    }
+  };
+
+  const toggleDeafen = () => {
+    const newDeafened = !isDeafened;
+    setIsDeafened(newDeafened);
+    
+    if (newDeafened) {
+      if (!isMuted && localStreamRef.current) {
+        const audioTrack = localStreamRef.current.getAudioTracks()[0];
+        if (audioTrack) {
+          audioTrack.enabled = false;
+          setIsMuted(true);
+        }
+      }
+    } else {
+      if (localStreamRef.current) {
+        const audioTrack = localStreamRef.current.getAudioTracks()[0];
+        if (audioTrack) {
+          audioTrack.enabled = true;
+          setIsMuted(false);
+        }
       }
     }
   };
@@ -374,17 +403,25 @@ export default function GroupCallView({ channel, serverTopicHex, vcChannelId, my
     }
   };
 
-  const startScreenShare = async (sourceId, res, fps) => {
+  const startScreenShare = async (sourceId, res, fps, shareAudio) => {
     setShowScreenShareModal(false);
     let stream = null;
     
     try {
       if (sourceId === 'native') {
-        stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+        stream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: shareAudio 
+        });
       } else {
         try {
           stream = await navigator.mediaDevices.getUserMedia({
-            audio: false,
+            audio: shareAudio ? {
+              mandatory: {
+                chromeMediaSource: 'desktop',
+                chromeMediaSourceId: sourceId
+              }
+            } : false,
             video: {
               mandatory: {
                 chromeMediaSource: 'desktop',
@@ -396,62 +433,102 @@ export default function GroupCallView({ channel, serverTopicHex, vcChannelId, my
             }
           });
         } catch (initialErr) {
+          console.warn("Optimal capture rejected. Using fallback.", initialErr);
           stream = await navigator.mediaDevices.getUserMedia({
-            audio: false,
-            video: { mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: sourceId } }
+            audio: shareAudio ? {
+              mandatory: {
+                chromeMediaSource: 'desktop',
+                chromeMediaSourceId: sourceId
+              }
+            } : false,
+            video: {
+              mandatory: {
+                chromeMediaSource: 'desktop',
+                chromeMediaSourceId: sourceId
+              }
+            }
           });
         }
       }
       
       const videoTrack = stream.getVideoTracks()[0];
-      videoTrack.contentHint = 'motion';
-      videoTrack.onended = () => stopScreenShare();
+      const audioTrack = stream.getAudioTracks()[0];
+
+      if (videoTrack) {
+        videoTrack.contentHint = 'motion';
+        videoTrack.onended = () => {
+          stopScreenShare();
+        };
+      }
 
       localScreenStreamRef.current = stream;
       setIsScreenSharing(true); 
 
-      // Add track to all existing peer connections
       Object.values(pcs.current).forEach(pc => {
-        const sender = pc.addTrack(videoTrack, stream);
-        try {
-          const params = sender.getParameters();
-          if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
-          params.encodings[0].maxFramerate = fps;
-          
-          let maxBitrate = 8000000; 
-          if (res.height <= 720) maxBitrate = 4000000; 
-          if (res.height <= 480) maxBitrate = 1500000; 
-          if (res.height <= 360) maxBitrate = 800000; 
-          
-          params.encodings[0].maxBitrate = maxBitrate;
-          if ('degradationPreference' in params) params.degradationPreference = 'maintain-framerate'; 
-          sender.setParameters(params);
-        } catch (e) {}
+        if (videoTrack) {
+          const sender = pc.addTrack(videoTrack, stream);
+          try {
+            const params = sender.getParameters();
+            if (!params.encodings || params.encodings.length === 0) {
+              params.encodings = [{}];
+            }
+            params.encodings[0].maxFramerate = fps;
+            let maxBitrate = 8000000; 
+            if (res.height <= 720) maxBitrate = 4000000; 
+            if (res.height <= 480) maxBitrate = 1500000; 
+            if (res.height <= 360) maxBitrate = 800000; 
+            params.encodings[0].maxBitrate = maxBitrate;
+            if ('degradationPreference' in params) {
+              params.degradationPreference = 'maintain-framerate'; 
+            }
+            sender.setParameters(params);
+          } catch (paramErr) {
+            console.warn("Could not set sender parameters:", paramErr);
+          }
+        }
+        
+        if (audioTrack) {
+          pc.addTrack(audioTrack, stream);
+        }
       });
 
     } catch (err) {
-      console.error("Screen share failed", err);
+      console.error("Screen share failed or cancelled", err);
+      
       if (stream) stream.getTracks().forEach(t => { t.enabled = false; t.stop(); });
+      if (localScreenStreamRef.current) {
+        localScreenStreamRef.current.getTracks().forEach(t => { t.enabled = false; t.stop(); });
+        localScreenStreamRef.current = null;
+      }
+      
       setIsScreenSharing(false);
+      
+      if (err.name !== 'NotAllowedError' && err.name !== 'AbortError') {
+        alert(`Could not capture this window/screen.\nError: ${err.name} - ${err.message}`);
+      }
     }
   };
 
   const stopScreenShare = async () => {
     if (localScreenStreamRef.current) {
-      const trackToRemove = localScreenStreamRef.current.getVideoTracks()[0];
-      
-      Object.values(pcs.current).forEach(pc => {
-        const sender = pc.getSenders().find(s => s.track === trackToRemove);
-        if (sender) pc.removeTrack(sender);
+      localScreenStreamRef.current.getTracks().forEach(t => {
+        Object.values(pcs.current).forEach(pc => {
+          const senders = pc.getSenders();
+          const sender = senders.find(s => s.track === t);
+          if (sender) {
+            try { pc.removeTrack(sender); } catch (e) {}
+          }
+        });
+        t.enabled = false;
+        t.stop();
       });
-
-      localScreenStreamRef.current.getTracks().forEach(t => { t.enabled = false; t.stop(); });
       localScreenStreamRef.current = null;
-      setIsScreenSharing(false);
-      
-      if (expandedStreamId === 'local-screen') {
-        setExpandedStreamId(null);
-      }
+    }
+    
+    setIsScreenSharing(false);
+    
+    if (expandedStreamId === 'local-screen') {
+      setExpandedStreamId(null);
     }
   };
 
@@ -542,11 +619,11 @@ export default function GroupCallView({ channel, serverTopicHex, vcChannelId, my
           {gridItems.map(item => (
             <div 
               key={item.id} 
-              className={`group bg-[#2b2d31] rounded-xl flex flex-col items-center justify-center transition-all duration-300 shadow-lg border border-gray-800 relative overflow-hidden aspect-video ${item.voiceActive ? 'ring-2 ring-green-500' : 'ring-2 ring-transparent'}`}
+              className={`group bg-[#2b2d31] rounded-xl flex flex-col items-center justify-center transition-all duration-300 shadow-lg border border-gray-800 relative overflow-hidden aspect-video ${item.voiceActive && !isDeafened ? 'ring-2 ring-green-500' : 'ring-2 ring-transparent'}`}
             >
               {item.stream && !item.isAudioOnly ? (
                 <>
-                  <VideoPlayer stream={item.stream} muted={item.isLocal} isAudioOnly={false} />
+                  <VideoPlayer stream={item.stream} muted={item.isLocal} deafened={isDeafened} isAudioOnly={false} />
                   <button 
                     onClick={(e) => { e.stopPropagation(); setExpandedStreamId(item.id); }}
                     className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white p-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10"
@@ -557,7 +634,7 @@ export default function GroupCallView({ channel, serverTopicHex, vcChannelId, my
                 </>
               ) : (
                 <>
-                  {item.stream && item.isAudioOnly && <VideoPlayer stream={item.stream} muted={item.isLocal} isAudioOnly={true} />}
+                  {item.stream && item.isAudioOnly && <VideoPlayer stream={item.stream} muted={item.isLocal} deafened={isDeafened} isAudioOnly={true} />}
                   <div className={`rounded-full flex items-center justify-center text-white font-bold overflow-hidden w-24 h-24 text-3xl ${item.avatar ? 'bg-transparent' : 'bg-indigo-500'}`}>
                     {item.avatar ? (
                       <img src={item.avatar} alt="avatar" className="w-full h-full object-cover" />
@@ -579,13 +656,25 @@ export default function GroupCallView({ channel, serverTopicHex, vcChannelId, my
       <div className="h-20 bg-[#2b2d31] flex items-center justify-center gap-4 shrink-0 rounded-t-2xl mx-4 border-t border-x border-gray-800">
         <button 
           onClick={toggleMute}
-          className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isMuted ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-[#383a40] text-gray-300 hover:bg-gray-600'}`}
+          className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isMuted ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-[#383a40] text-gray-300 hover:bg-gray-600'} ${isDeafened ? 'opacity-50 cursor-not-allowed' : ''}`}
           title={isMuted ? "Unmute" : "Mute"}
         >
           {isMuted ? (
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
           ) : (
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+          )}
+        </button>
+
+        <button 
+          onClick={toggleDeafen}
+          className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isDeafened ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-[#383a40] text-gray-300 hover:bg-gray-600'}`}
+          title={isDeafened ? "Undeafen" : "Deafen"}
+        >
+          {isDeafened ? (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.3 17.3A8.9 8.9 0 0 0 21 12a9 9 0 0 0-18 0 8.9 8.9 0 0 0 3.7 5.3"></path><line x1="1" y1="1" x2="23" y2="23"></line><path d="M3 12v3a3 3 0 0 0 3 3h1v-7H3z"></path><path d="M21 12v3a3 3 0 0 1-3 3h-1v-7h4z"></path></svg>
+          ) : (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"></path><path d="M21 19a2 2 0 0 1-2 2h-1v-9h4v7z"></path><path d="M3 19a2 2 0 0 0 2 2h1v-9H2v7z"></path></svg>
           )}
         </button>
 
@@ -652,7 +741,7 @@ export default function GroupCallView({ channel, serverTopicHex, vcChannelId, my
         return (
           <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center backdrop-blur-sm" onClick={() => setExpandedStreamId(null)}>
             <div className="relative w-full h-full flex items-center justify-center p-8">
-              <VideoPlayer stream={expandedItem.stream} muted={expandedItem.isLocal} isAudioOnly={false} />
+              <VideoPlayer stream={expandedItem.stream} muted={expandedItem.isLocal} deafened={isDeafened} isAudioOnly={false} />
               <button 
                 className="absolute top-6 right-6 text-white hover:text-gray-300 bg-black/50 hover:bg-black/80 rounded-full p-2 transition-colors" 
                 onClick={(e) => { e.stopPropagation(); setExpandedStreamId(null); }}

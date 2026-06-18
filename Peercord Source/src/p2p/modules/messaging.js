@@ -87,7 +87,7 @@ export async function processMessage(network, msg) {
   if (network.processedSigs.has(msg.signature)) return;
   network.processedSigs.add(msg.signature);
 
-  const applyReaction = (targetId, emoji, sender) => {
+  const applyReaction = async (targetId, emoji, sender) => {
     if (!network.reactions.has(targetId)) network.reactions.set(targetId, {});
     const msgReactions = network.reactions.get(targetId);
     if (!msgReactions[emoji]) msgReactions[emoji] = [];
@@ -99,6 +99,7 @@ export async function processMessage(network, msg) {
     } else {
       msgReactions[emoji].push(sender);
     }
+    if (network.reactionsDb) await network.reactionsDb.put(targetId, msgReactions);
     network._emitMessages();
   };
 
@@ -128,6 +129,7 @@ export async function processMessage(network, msg) {
     if (decrypted.type === 'server_invite') {
       if (!network.messages.has(decrypted.id)) {
          network.messages.set(decrypted.id, msg);
+         if (network.messageCacheDb) network.messageCacheDb.put(decrypted.id, msg);
          network._emitMessages();
       }
       return;
@@ -183,6 +185,7 @@ export async function processMessage(network, msg) {
 
       if (!network.deletedMessages.has(msg.payload.id) && !network.messages.has(msg.payload.id)) {
         network.messages.set(msg.payload.id, msg);
+        if (network.messageCacheDb) network.messageCacheDb.put(msg.payload.id, msg);
         network._emitMessages();
 
         // Re-open DM if it was closed
@@ -388,6 +391,8 @@ export async function processMessage(network, msg) {
       network.deletedMessages.add(targetId);
       network.messages.delete(targetId);
       network.reactions.delete(targetId);
+      if (network.messageCacheDb) network.messageCacheDb.del(targetId);
+      if (network.reactionsDb) network.reactionsDb.del(targetId);
       network._emitMessages();
     }
     return;
@@ -398,6 +403,7 @@ export async function processMessage(network, msg) {
     if (original && original.sender === msg.sender) {
       original.payload.text = text;
       original.payload.edited = true;
+      if (network.messageCacheDb) network.messageCacheDb.put(targetId, original);
       network._emitMessages();
     }
     return;
@@ -462,6 +468,7 @@ export async function processMessage(network, msg) {
 
     if (canAccept && !network.deletedMessages.has(id) && !network.messages.has(id)) {
       network.messages.set(id, msg);
+      if (network.messageCacheDb) network.messageCacheDb.put(id, msg);
       network._emitMessages();
 
       if (type === 'file') {

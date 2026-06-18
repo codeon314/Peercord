@@ -309,6 +309,7 @@ export default function MainApp({ profile, setProfile, onLogout, updateState, si
                   ...channelVCS,
                   [peerKey]: {
                     muted: payload.muted,
+                    deafened: payload.deafened,
                     screenshare: payload.screenshare,
                     timestamp: Date.now()
                   }
@@ -355,7 +356,7 @@ export default function MainApp({ profile, setProfile, onLogout, updateState, si
         for (const serverId in next) {
           for (const channelId in next[serverId]) {
             for (const peerKey in next[serverId][channelId]) {
-              if (now - next[serverId][channelId][peerKey].timestamp > 10000) {
+              if (now - next[serverId][channelId][peerKey].timestamp > 15000) {
                 delete next[serverId][channelId][peerKey];
                 changed = true;
               }
@@ -767,6 +768,7 @@ export default function MainApp({ profile, setProfile, onLogout, updateState, si
         {/* Group Call View (Used for both DMs and Server VCs) */}
         {(activeGroupCall || activeVc) && (
           <GroupCallView 
+            key={activeGroupCall ? activeGroupCall.channel : `${activeVc.serverId}-${activeVc.channelId}`}
             className={showCallView && (isViewingGroupCall || isViewingVC) ? `flex-1 flex flex-col min-w-0 transition-[margin] duration-300 ${isDrawerOpen && !isPinned ? 'mr-64' : ''}` : 'hidden'}
             channel={activeGroupCall?.channel || `${activeVc.serverId}-${activeVc.channelId}`}
             serverTopicHex={activeVc?.serverId}
@@ -775,7 +777,7 @@ export default function MainApp({ profile, setProfile, onLogout, updateState, si
             myKey={myKey}
             myProfile={profile}
             knownUsers={knownUsers}
-            onLocalStateChange={(muted, screenshare) => {
+            onLocalStateChange={(muted, deafened, screenshare) => {
               if (!activeVc) return;
               setVcStates(prev => {
                 const serverVCS = prev[activeVc.serverId] || {};
@@ -786,7 +788,7 @@ export default function MainApp({ profile, setProfile, onLogout, updateState, si
                     ...serverVCS,
                     [activeVc.channelId]: {
                       ...channelVCS,
-                      [myKey]: { muted, screenshare, timestamp: Date.now() }
+                      [myKey]: { muted, deafened, screenshare, timestamp: Date.now() }
                     }
                   }
                 };

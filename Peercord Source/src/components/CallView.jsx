@@ -4,6 +4,7 @@ import ScreenShareModal from './ScreenShareModal.jsx';
 
 export default function CallView({ targetKey, targetProfile, myProfile, isCaller, status, onClose, onToggleChat, onConnected, className, initialVideoOn }) {
   const [isMuted, setIsMuted] = useState(false);
+  const [isDeafened, setIsDeafened] = useState(false);
   const [isVideoOn, setIsVideoOn] = useState(initialVideoOn || false);
   const [localVoiceActive, setLocalVoiceActive] = useState(false);
   const [remoteVoiceActive, setRemoteVoiceActive] = useState(false);
@@ -21,6 +22,7 @@ export default function CallView({ targetKey, targetProfile, myProfile, isCaller
   const localCameraStreamRef = useRef(null);
   
   const remoteAudioRef = useRef(null);
+  const remoteAudioStreamRef = useRef(new MediaStream());
   const remoteVideoRef = useRef(null);
   const localVideoRef = useRef(null);
   
@@ -105,13 +107,22 @@ export default function CallView({ targetKey, targetProfile, myProfile, isCaller
           setHasRemoteVideo(true);
         };
       } else if (e.track.kind === 'audio') {
+        // Add all incoming audio tracks to a unified MediaStream
+        remoteAudioStreamRef.current.addTrack(e.track);
+        
         if (remoteAudioRef.current) {
-          remoteAudioRef.current.srcObject = e.streams[0];
+          if (remoteAudioRef.current.srcObject !== remoteAudioStreamRef.current) {
+            remoteAudioRef.current.srcObject = remoteAudioStreamRef.current;
+          }
           const outputId = localStorage.getItem('pear_audio_output');
           if (outputId && outputId !== 'default' && remoteAudioRef.current.setSinkId) {
             remoteAudioRef.current.setSinkId(outputId).catch(console.error);
           }
         }
+
+        e.track.onended = () => {
+          remoteAudioStreamRef.current.removeTrack(e.track);
+        };
       }
     };
 
@@ -243,7 +254,6 @@ export default function CallView({ targetKey, targetProfile, myProfile, isCaller
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[status, isCaller, targetKey, mediaReady]);
 
-  // FIX: Removed onConnected from dependency array to prevent listener recreation
   useEffect(() => {
     const processSignal = async (payload) => {
       const pc = pcRef.current;
@@ -317,11 +327,35 @@ export default function CallView({ targetKey, targetProfile, myProfile, isCaller
   }, [targetKey]);
 
   const toggleMute = () => {
+    if (isDeafened) return; // Cannot unmute while deafened
     if (localStreamRef.current) {
       const audioTrack = localStreamRef.current.getAudioTracks()[0];
       if (audioTrack) {
         audioTrack.enabled = !audioTrack.enabled;
         setIsMuted(!audioTrack.enabled);
+      }
+    }
+  };
+
+  const toggleDeafen = () => {
+    const newDeafened = !isDeafened;
+    setIsDeafened(newDeafened);
+    
+    if (newDeafened) {
+      if (!isMuted && localStreamRef.current) {
+        const audioTrack = localStreamRef.current.getAudioTracks()[0];
+        if (audioTrack) {
+          audioTrack.enabled = false;
+          setIsMuted(true);
+        }
+      }
+    } else {
+      if (localStreamRef.current) {
+        const audioTrack = localStreamRef.current.getAudioTracks()[0];
+        if (audioTrack) {
+          audioTrack.enabled = true;
+          setIsMuted(false);
+        }
       }
     }
   };
@@ -363,7 +397,7 @@ export default function CallView({ targetKey, targetProfile, myProfile, isCaller
     }
   };
 
-  const startScreenShare = async (sourceId, res, fps) => {
+  const startScreenShare = async (sourceId, res, fps, shareAudio) => {
     setShowScreenShareModal(false);
     let stream = null;
     
@@ -371,12 +405,17 @@ export default function CallView({ targetKey, targetProfile, myProfile, isCaller
       if (sourceId === 'native') {
         stream = await navigator.mediaDevices.getDisplayMedia({
           video: true,
-          audio: false 
+          audio: shareAudio 
         });
       } else {
         try {
           stream = await navigator.mediaDevices.getUserMedia({
-            audio: false,
+            audio: shareAudio ? {
+              mandatory: {
+                chromeMediaSource: 'desktop',
+                chromeMediaSourceId: sourceId
+              }
+            } : false,
             video: {
               mandatory: {
                 chromeMediaSource: 'desktop',
@@ -390,7 +429,12 @@ export default function CallView({ targetKey, targetProfile, myProfile, isCaller
         } catch (initialErr) {
           console.warn("Optimal capture rejected. Using fallback.", initialErr);
           stream = await navigator.mediaDevices.getUserMedia({
-            audio: false,
+            audio: shareAudio ? {
+              mandatory: {
+                chromeMediaSource: 'desktop',
+                chromeMediaSourceId: sourceId
+              }
+            } : false,
             video: {
               mandatory: {
                 chromeMediaSource: 'desktop',
@@ -402,44 +446,49 @@ export default function CallView({ targetKey, targetProfile, myProfile, isCaller
       }
       
       const videoTrack = stream.getVideoTracks()[0];
-      videoTrack.contentHint = 'motion';
+      const audioTrack = stream.getAudioTracks()[0];
 
-      videoTrack.onended = () => {
-        stopScreenShare();
-      };
+      if (videoTrack) {
+        videoTrack.contentHint = 'motion';
+        videoTrack.onended = () => {
+          stopScreenShare();
+        };
+      }
 
       localScreenStreamRef.current = stream;
       setIsScreenSharing(true); 
 
-      const sender = pcRef.current.addTrack(videoTrack, stream);
-      
-      try {
-        const params = sender.getParameters();
-        if (!params.encodings || params.encodings.length === 0) {
-          params.encodings = [{}];
+      if (pcRef.current) {
+        if (videoTrack) {
+          const sender = pcRef.current.addTrack(videoTrack, stream);
+          try {
+            const params = sender.getParameters();
+            if (!params.encodings || params.encodings.length === 0) {
+              params.encodings = [{}];
+            }
+            params.encodings[0].maxFramerate = fps;
+            let maxBitrate = 8000000; 
+            if (res.height <= 720) maxBitrate = 4000000; 
+            if (res.height <= 480) maxBitrate = 1500000; 
+            if (res.height <= 360) maxBitrate = 800000; 
+            params.encodings[0].maxBitrate = maxBitrate;
+            if ('degradationPreference' in params) {
+              params.degradationPreference = 'maintain-framerate'; 
+            }
+            await sender.setParameters(params);
+          } catch (paramErr) {
+            console.warn("Could not set sender parameters:", paramErr);
+          }
         }
         
-        params.encodings[0].maxFramerate = fps;
-        
-        let maxBitrate = 8000000; 
-        if (res.height <= 720) maxBitrate = 4000000; 
-        if (res.height <= 480) maxBitrate = 1500000; 
-        if (res.height <= 360) maxBitrate = 800000; 
-        
-        params.encodings[0].maxBitrate = maxBitrate;
-        
-        if ('degradationPreference' in params) {
-          params.degradationPreference = 'maintain-framerate'; 
+        if (audioTrack) {
+          pcRef.current.addTrack(audioTrack, stream);
         }
 
-        await sender.setParameters(params);
-      } catch (paramErr) {
-        console.warn("Could not set sender parameters:", paramErr);
+        const offer = await pcRef.current.createOffer();
+        await pcRef.current.setLocalDescription(offer);
+        network.sendWebRTCSignal(targetKey, { type: 'webrtc-offer', sdp: offer });
       }
-
-      const offer = await pcRef.current.createOffer();
-      await pcRef.current.setLocalDescription(offer);
-      network.sendWebRTCSignal(targetKey, { type: 'webrtc-offer', sdp: offer });
 
     } catch (err) {
       console.error("Screen share failed or cancelled", err);
@@ -464,10 +513,15 @@ export default function CallView({ targetKey, targetProfile, myProfile, isCaller
       localVideoRef.current.srcObject = null;
     }
 
-    let trackToRemove = null;
     if (localScreenStreamRef.current) {
-      trackToRemove = localScreenStreamRef.current.getVideoTracks()[0];
       localScreenStreamRef.current.getTracks().forEach(t => {
+        if (pcRef.current) {
+          const senders = pcRef.current.getSenders();
+          const sender = senders.find(s => s.track === t);
+          if (sender) {
+            try { pcRef.current.removeTrack(sender); } catch (e) {}
+          }
+        }
         t.enabled = false;
         t.stop();
       });
@@ -477,27 +531,20 @@ export default function CallView({ targetKey, targetProfile, myProfile, isCaller
     setIsScreenSharing(false);
     setIsFullscreen(false);
     
-    if (pcRef.current && trackToRemove) {
-      const senders = pcRef.current.getSenders();
-      const videoSender = senders.find(s => s.track === trackToRemove);
-      if (videoSender) {
-        try {
-          pcRef.current.removeTrack(videoSender);
-          if (pcRef.current.signalingState !== 'closed') {
-            const offer = await pcRef.current.createOffer();
-            await pcRef.current.setLocalDescription(offer);
-            network.sendWebRTCSignal(targetKey, { type: 'webrtc-offer', sdp: offer });
-          }
-        } catch (e) {
-          console.warn("Failed to negotiate track removal", e);
-        }
+    if (pcRef.current && pcRef.current.signalingState !== 'closed') {
+      try {
+        const offer = await pcRef.current.createOffer();
+        await pcRef.current.setLocalDescription(offer);
+        network.sendWebRTCSignal(targetKey, { type: 'webrtc-offer', sdp: offer });
+      } catch (e) {
+        console.warn("Failed to negotiate track removal", e);
       }
     }
   };
 
   return (
     <div className={`bg-base flex flex-col relative ${className}`}>
-      <audio ref={remoteAudioRef} autoPlay className="hidden" />
+      <audio ref={remoteAudioRef} autoPlay muted={isDeafened} className="hidden" />
       
       {/* Header */}
       <div className="h-14 shadow-sm flex items-center px-4 border-b border-surface gap-2 shrink-0 bg-panel">
@@ -533,7 +580,7 @@ export default function CallView({ targetKey, targetProfile, myProfile, isCaller
             onClick={() => !isFullscreen && setIsFullscreen(true)}
           >
             {hasRemoteVideo && (
-              <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-contain" />
+              <video ref={remoteVideoRef} autoPlay playsInline muted={true} className="w-full h-full object-contain" />
             )}
             {isLocalVideoActive && !hasRemoteVideo && (
               <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-contain" />
@@ -571,7 +618,7 @@ export default function CallView({ targetKey, targetProfile, myProfile, isCaller
         <div className={`flex justify-center gap-6 ${isVideoActive ? 'shrink-0 h-40' : 'w-full max-w-3xl'}`}>
           
           {/* Remote User Square */}
-          <div className={`bg-surface rounded-xl flex flex-col items-center justify-center gap-3 transition-all duration-300 shadow-lg border border-panel relative overflow-hidden ${isVideoActive ? 'w-48 h-full' : 'w-72 h-72'} ${status === 'ringing' ? 'opacity-50' : ''} ${remoteVoiceActive ? 'ring-2 ring-green-500' : 'ring-2 ring-transparent'}`}>
+          <div className={`bg-surface rounded-xl flex flex-col items-center justify-center gap-3 transition-all duration-300 shadow-lg border border-panel relative overflow-hidden ${isVideoActive ? 'w-48 h-full' : 'w-72 h-72'} ${status === 'ringing' ? 'opacity-50' : ''} ${remoteVoiceActive && !isDeafened ? 'ring-2 ring-green-500' : 'ring-2 ring-transparent'}`}>
             {status === 'ringing' && (
               <div className="absolute inset-0 bg-black/20 flex items-center justify-center z-10">
                 <div className="w-full h-full animate-pulse bg-white/5"></div>
@@ -607,13 +654,25 @@ export default function CallView({ targetKey, targetProfile, myProfile, isCaller
       <div className="h-20 bg-surface flex items-center justify-center gap-4 shrink-0 rounded-t-2xl mx-4 border-t border-x border-panel">
         <button 
           onClick={toggleMute}
-          className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isMuted ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-panel text-text hover:bg-base'}`}
+          className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isMuted ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-panel text-text hover:bg-base'} ${isDeafened ? 'opacity-50 cursor-not-allowed' : ''}`}
           title={isMuted ? "Unmute" : "Mute"}
         >
           {isMuted ? (
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
           ) : (
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+          )}
+        </button>
+
+        <button 
+          onClick={toggleDeafen}
+          className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isDeafened ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-panel text-text hover:bg-base'}`}
+          title={isDeafened ? "Undeafen" : "Deafen"}
+        >
+          {isDeafened ? (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.3 17.3A8.9 8.9 0 0 0 21 12a9 9 0 0 0-18 0 8.9 8.9 0 0 0 3.7 5.3"></path><line x1="1" y1="1" x2="23" y2="23"></line><path d="M3 12v3a3 3 0 0 0 3 3h1v-7H3z"></path><path d="M21 12v3a3 3 0 0 1-3 3h-1v-7h4z"></path></svg>
+          ) : (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"></path><path d="M21 19a2 2 0 0 1-2 2h-1v-9h4v7z"></path><path d="M3 19a2 2 0 0 0 2 2h1v-9H2v7z"></path></svg>
           )}
         </button>
 

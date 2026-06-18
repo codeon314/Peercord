@@ -17,6 +17,9 @@ export default function App() {
   const[countdown, setCountdown] = useState(5);
   const[busyReasons, setBusyReasons] = useState([]);
   const countdownRef = useRef(null);
+  
+  // Sync Event State
+  const [syncEvent, setSyncEvent] = useState(null);
 
   const triggerRestart = () => {
     if (typeof window !== 'undefined' && window.require) {
@@ -147,6 +150,13 @@ export default function App() {
     }
 
     initP2P().then(async () => {
+      network.onSyncEvent = (event) => {
+        setSyncEvent(event);
+        if (event === 'completed' || event === 'error') {
+          setTimeout(() => setSyncEvent(null), 5000);
+        }
+      };
+
       const storedIdentity = localStorage.getItem('pear_discord_identity');
       if (storedIdentity) {
         try {
@@ -249,6 +259,22 @@ export default function App() {
         )}
       </div>
       {showConsole && <ConsoleOverlay logs={logs} onClose={() => setShowConsole(false)} />}
+
+      {/* Sync Event Toast */}
+      {syncEvent && (
+        <div className="absolute top-6 left-1/2 -translate-x-1/2 bg-surface border border-accent shadow-2xl rounded-lg p-4 z-[9999] flex items-center gap-3">
+          {syncEvent === 'started' && <span className="animate-spin w-5 h-5 border-2 border-accent border-t-transparent rounded-full"></span>}
+          {syncEvent === 'completed' && <span className="text-green-500 text-xl">✓</span>}
+          {syncEvent === 'error' && <span className="text-red-500 text-xl">✗</span>}
+          <div className="flex flex-col">
+            <span className="text-sm font-bold text-text">Account Sync</span>
+            <span className="text-xs text-muted">
+              {syncEvent === 'started' ? 'Another device is syncing your account...' : 
+               syncEvent === 'completed' ? 'Sync completed successfully!' : 'Sync failed.'}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Update Notification Flyout */}
       {updateState && !flyoutDismissed && (

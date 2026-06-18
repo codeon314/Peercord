@@ -27,6 +27,8 @@ async function handleIdentity(network, peerKey, parsed) {
   const peerInfo = network.peers.get(peerKey);
   if (!peerInfo) return;
 
+  const identityKey = parsed.identityKey || peerKey;
+  peerInfo.identityKey = identityKey;
   peerInfo.displayName = parsed.displayName;
   peerInfo.username = parsed.username;
   peerInfo.avatar = parsed.avatar;
@@ -42,22 +44,26 @@ async function handleIdentity(network, peerKey, parsed) {
     connections: parsed.connections || []
   };
   
-  network.knownProfiles.set(peerKey, profileObj);
-  if (network.profilesDb) await network.profilesDb.put(peerKey, profileObj);
-  if (network.coresDb && parsed.coreKey) await network.coresDb.put(peerKey, parsed.coreKey);
+  network.knownProfiles.set(identityKey, profileObj);
+  if (network.profilesDb) await network.profilesDb.put(identityKey, profileObj);
+  
+  if (parsed.coreKey) {
+    await network.trackPeerCore(parsed.coreKey);
+    if (network.coresDb) await network.coresDb.put(parsed.coreKey, identityKey);
+  }
   
   network._emitKnownProfiles();
   
   if (parsed.username) {
     const uname = parsed.username.toLowerCase();
-    network.userDirectory.set(uname, { pubKey: peerKey, profile: profileObj });
-    network.dirDb.put(uname, { pubKey: peerKey, profile: profileObj });
-    network._checkPendingRequests(uname, peerKey, profileObj);
+    network.userDirectory.set(uname, { pubKey: identityKey, profile: profileObj });
+    network.dirDb.put(uname, { pubKey: identityKey, profile: profileObj });
+    network._checkPendingRequests(uname, identityKey, profileObj);
   }
 
-  if (network.dms[peerKey]) {
-    network.dms[peerKey].profile = profileObj;
-    await network.db.put('dm:' + peerKey, network.dms[peerKey]);
+  if (network.dms[identityKey]) {
+    network.dms[identityKey].profile = profileObj;
+    await network.db.put('dm:' + identityKey, network.dms[identityKey]);
     if (network.onDMsUpdate) network.onDMsUpdate({ ...network.dms });
   }
 
@@ -68,7 +74,7 @@ async function handleIdentity(network, peerKey, parsed) {
   let shouldTrack = false;
   
   // 1. Are they a direct friend? (Accepted or Pending)
-  if (network.dms[peerKey]) {
+  if (network.dms[identityKey]) {
     shouldTrack = true;
   }
   
@@ -89,7 +95,7 @@ async function handleIdentity(network, peerKey, parsed) {
     }
   }
 
-  if (shouldTrack) {
+  if (shouldTrack && parsed.coreKey) {
     await network.trackPeerCore(parsed.coreKey);
   }
 }
@@ -115,6 +121,9 @@ function handleEphemeral(network, peerKey, parsed, send) {
   const { payload } = parsed;
   if (!payload) return;
 
+  const peerInfo = network.peers.get(peerKey);
+  const identityKey = peerInfo ? (peerInfo.identityKey || peerKey) : peerKey;
+
   if (payload.type === 'sync_request') {
     if (network.joinedTopics.has(payload.topic)) {
       const pendingTargets = Object.entries(network.dms)
@@ -123,6 +132,7 @@ function handleEphemeral(network, peerKey, parsed, send) {
 
       const identityMsg = { 
         type: 'identity', 
+        identityKey: network.myKey,
         displayName: network.displayName, 
         username: network.username, 
         avatar: network.avatar, 
@@ -138,7 +148,6 @@ function handleEphemeral(network, peerKey, parsed, send) {
   }
 
   if (payload.type === 'offline') {
-    const peerInfo = network.peers.get(peerKey);
     if (peerInfo) {
       network.peers.delete(peerKey);
       try { peerInfo.conn.destroy(); } catch (e) {} 
@@ -147,7 +156,7 @@ function handleEphemeral(network, peerKey, parsed, send) {
   }
   
   if (payload.type.startsWith('webrtc-') || payload.type === 'voice_activity' || payload.type.startsWith('vc-')) {
-    for (const fn of network.webrtcListeners) fn(peerKey, payload);
+    for (const fn of network.webrtcListeners) fn(identityKey, payload);
   }
 
   if (payload.type === 'transfer_progress') {
@@ -163,5 +172,5 @@ function handleEphemeral(network, peerKey, parsed, send) {
     }
   }
 
-  if (network.onEphemeral) network.onEphemeral(peerKey, payload);
+  if (network.onEphemeral) network.onEphemeral(identityKey, payload);
 }

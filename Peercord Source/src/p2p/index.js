@@ -20,6 +20,8 @@ class P2PNetwork {
     this.localFilesDb = null;
     this.coresDb = null;
     this.profilesDb = null;
+    this.messageCacheDb = null;
+    this.reactionsDb = null;
     
     this.seedHex = null;
     this.coreKey = null; 
@@ -69,6 +71,7 @@ class P2PNetwork {
     this.onServerMembersUpdate = null;
     this.onSync = null;
     this.onTransfersUpdate = null;
+    this.onSyncEvent = null;
   }
 
   getAllMessages = () => getAllMessages(this);
@@ -136,6 +139,8 @@ class P2PNetwork {
         this.deletedMessages.add(msgId);
         this.messages.delete(msgId);
         this.reactions.delete(msgId);
+        if (this.messageCacheDb) await this.messageCacheDb.del(msgId);
+        if (this.reactionsDb) await this.reactionsDb.del(msgId);
         if (!localDeleted.includes(msgId)) localDeleted.push(msgId);
         if (this.transfers[msgId]) delete this.transfers[msgId];
       }
@@ -221,6 +226,22 @@ class P2PNetwork {
   }
 
   async exportAccount() {
+    const myMessages = [];
+    for (let i = 0; i < this.localCore.length; i++) {
+      const msg = await this.localCore.get(i);
+      myMessages.push(msg);
+    }
+
+    const trackedCores = [];
+    for await (const { key, value } of this.coresDb.createReadStream()) {
+      trackedCores.push({ coreKey: key, identityKey: value });
+    }
+
+    const serializedMembers = {};
+    for (const [topic, set] of Object.entries(this.serverMembers)) {
+      serializedMembers[topic] = Array.from(set);
+    }
+
     const exportData = {
       profile: {
         displayName: this.displayName,
@@ -232,6 +253,7 @@ class P2PNetwork {
       },
       dms: this.dms,
       servers: this.servers,
+      serverMembers: serializedMembers,
       knownProfiles: Array.from(this.knownProfiles.entries()),
       userDirectory: Array.from(this.userDirectory.entries()),
       settings: {
@@ -249,7 +271,12 @@ class P2PNetwork {
         notifyHubs: localStorage.getItem('pear_notify_hubs'),
         notifyMentions: localStorage.getItem('pear_notify_mentions'),
         notifyCalls: localStorage.getItem('pear_notify_calls')
-      }
+      },
+      myMessages,
+      trackedCores,
+      cachedMessages: Array.from(this.messages.values()),
+      cachedReactions: Array.from(this.reactions.entries()),
+      deletedMessages: Array.from(this.deletedMessages)
     };
     return JSON.stringify(exportData);
   }
@@ -257,19 +284,6 @@ class P2PNetwork {
   async importAccount(jsonString) {
     const data = JSON.parse(jsonString);
     
-    for (const [key, value] of Object.entries(data.dms)) {
-      await this.db.put('dm:' + key, value);
-    }
-    for (const server of data.servers) {
-      await this.serverDb.put(server.topicHex, server);
-    }
-    for (const [key, value] of data.knownProfiles) {
-      await this.profilesDb.put(key, value);
-    }
-    for (const [key, value] of data.userDirectory) {
-      await this.dirDb.put(key, value);
-    }
-
     if (data.settings) {
       for (const [k, v] of Object.entries(data.settings)) {
         if (v !== null && v !== undefined) {
@@ -277,6 +291,33 @@ class P2PNetwork {
           localStorage.setItem(storageKey, v);
         }
       }
+    }
+
+    // Calculate storage path to save the pending import file directly to disk
+    // This bypasses the 5MB localStorage limit which would crash on large message histories
+    let basePath = './p2p-storage';
+    if (os && path && typeof os.homedir === 'function') {
+      const home = os.homedir();
+      const appData = process.platform === 'win32' 
+        ? process.env.APPDATA 
+        : (process.platform === 'darwin' ? path.join(home, 'Library', 'Application Support') : path.join(home, '.config'));
+      basePath = path.join(appData || home, 'Peercord', 'p2p-storage');
+    }
+    
+    let instanceId = localStorage.getItem('pear_instance_id');
+    if (!instanceId) {
+      instanceId = generateUUID();
+      localStorage.setItem('pear_instance_id', instanceId);
+    }
+    
+    const hashBuf = b4a.alloc(32);
+    sodium.crypto_generichash(hashBuf, b4a.from(data.profile.seedHex, 'hex'));
+    const accountHash = b4a.toString(hashBuf, 'hex').substring(0, 16);
+    const storagePath = path.join(basePath, `${instanceId}-${accountHash}`);
+    
+    if (fs) {
+      if (!fs.existsSync(storagePath)) fs.mkdirSync(storagePath, { recursive: true });
+      fs.writeFileSync(path.join(storagePath, 'pending_import.json'), jsonString);
     }
 
     return data.profile;
@@ -392,7 +433,6 @@ class P2PNetwork {
 
   async checkUsernameAvailable(username) {
     const normalized = username.toLowerCase();
-    // FIX: Explicitly pass ephemeral DHT to prevent router exhaustion
     const dht = new DHT({ ephemeral: true });
     const tempSwarm = new Hyperswarm({ dht, maxPeers: 3, maxClientConnections: 3, maxServerConnections: 0 });
     const topic = b4a.alloc(32);
@@ -440,6 +480,7 @@ class P2PNetwork {
 
     const identityMsg = {
       type: 'identity',
+      identityKey: this.myKey,
       displayName: this.displayName,
       username: this.username,
       avatar: this.avatar,
@@ -515,6 +556,83 @@ class P2PNetwork {
     this.coresDb = new Hyperbee(coresDbCore, { keyEncoding: 'utf-8', valueEncoding: 'utf-8' }); await this.coresDb.ready();
     const profilesDbCore = this.store.get({ name: 'profiles-db' }); await profilesDbCore.ready();
     this.profilesDb = new Hyperbee(profilesDbCore, { keyEncoding: 'utf-8', valueEncoding: 'json' }); await this.profilesDb.ready();
+    
+    const msgCacheCore = this.store.get({ name: 'message-cache-db' }); await msgCacheCore.ready();
+    this.messageCacheDb = new Hyperbee(msgCacheCore, { keyEncoding: 'utf-8', valueEncoding: 'json' }); await this.messageCacheDb.ready();
+    const reactionsCore = this.store.get({ name: 'reactions-db' }); await reactionsCore.ready();
+    this.reactionsDb = new Hyperbee(reactionsCore, { keyEncoding: 'utf-8', valueEncoding: 'json' }); await this.reactionsDb.ready();
+
+    // PROCESS PENDING IMPORT BEFORE READING STREAMS
+    let pendingMessagesToAppend = [];
+    if (fs && this.storagePath) {
+      const importPath = path.join(this.storagePath, 'pending_import.json');
+      if (fs.existsSync(importPath)) {
+        try {
+          const jsonString = fs.readFileSync(importPath, 'utf-8');
+          const data = JSON.parse(jsonString);
+          
+          if (data.dms) {
+            for (const [key, value] of Object.entries(data.dms)) {
+              await this.db.put('dm:' + key, value);
+            }
+          }
+          if (data.servers) {
+            for (const server of data.servers) {
+              await this.serverDb.put(server.topicHex, server);
+            }
+          }
+          if (data.serverMembers) {
+            for (const [topic, arr] of Object.entries(data.serverMembers)) {
+              this.serverMembers[topic] = new Set(arr);
+            }
+          }
+          if (data.knownProfiles) {
+            for (const [key, value] of data.knownProfiles) {
+              await this.profilesDb.put(key, value);
+            }
+          }
+          if (data.userDirectory) {
+            for (const [key, value] of data.userDirectory) {
+              await this.dirDb.put(key, value);
+            }
+          }
+          if (data.trackedCores) {
+            for (const item of data.trackedCores) {
+              if (typeof item === 'string') {
+                await this.coresDb.put(item, 'imported');
+              } else {
+                await this.coresDb.put(item.coreKey, item.identityKey);
+              }
+            }
+          }
+          if (data.myMessages) {
+            pendingMessagesToAppend = data.myMessages;
+          }
+          if (data.cachedMessages) {
+            for (const msg of data.cachedMessages) {
+              await this.messageCacheDb.put(msg.payload?.id || msg.id, msg);
+            }
+          }
+          if (data.cachedReactions) {
+            for (const [msgId, reactions] of data.cachedReactions) {
+              await this.reactionsDb.put(msgId, reactions);
+            }
+          }
+          if (data.deletedMessages) {
+            const localDeleted = JSON.parse(localStorage.getItem('pear_local_deleted_msgs') || '[]');
+            for (const id of data.deletedMessages) {
+              if (!localDeleted.includes(id)) localDeleted.push(id);
+            }
+            localStorage.setItem('pear_local_deleted_msgs', JSON.stringify(localDeleted));
+          }
+          
+          fs.unlinkSync(importPath);
+          console.log("[P2P] Successfully processed pending account import from file.");
+        } catch (e) {
+          console.error("[P2P] Failed to process pending import:", e);
+        }
+      }
+    }
 
     for await (const { key, value } of this.db.createReadStream({ gt: 'dm:', lt: 'dm:~' })) { 
       const pubKey = key.split(':')[1];
@@ -527,8 +645,27 @@ class P2PNetwork {
     for await (const { key } of this.pendingRequestsDb.createReadStream()) { this.pendingFriendRequests.add(key); }
     for await (const { key, value } of this.profilesDb.createReadStream()) { this.knownProfiles.set(key, value); }
 
+    // Load cached messages and reactions into memory
+    for await (const { key, value } of this.messageCacheDb.createReadStream()) {
+      if (!this.deletedMessages.has(key)) {
+        this.messages.set(key, value);
+      }
+    }
+    for await (const { key, value } of this.reactionsDb.createReadStream()) {
+      if (!this.deletedMessages.has(key)) {
+        this.reactions.set(key, value);
+      }
+    }
+
     this.localCore = this.store.get({ name: 'user-messages', valueEncoding: 'json' }); await this.localCore.ready();
     this.coreKey = b4a.toString(this.localCore.key, 'hex');
+
+    if (pendingMessagesToAppend.length > 0) {
+      for (const msg of pendingMessagesToAppend) {
+        await this.localCore.append(msg);
+      }
+      console.log(`[P2P] Restored ${pendingMessagesToAppend.length} messages to local core.`);
+    }
 
     const seed = b4a.from(seedHex, 'hex');
     const publicKey = b4a.alloc(32);
@@ -543,30 +680,27 @@ class P2PNetwork {
     if (this.onInit) this.onInit(this.myKey);
     if (this.onDMsUpdate) this.onDMsUpdate({ ...this.dms });
     this._emitServers();
+    this._emitServerMembers();
     
     for (let i = 0; i < this.localCore.length; i++) { this.processMessage(await this.localCore.get(i)); }
     this._emitMessages();
 
     const corePromises =[];
     for await (const { key, value } of this.coresDb.createReadStream()) {
-      corePromises.push(this.trackPeerCore(value));
+      corePromises.push(this.trackPeerCore(key).catch(()=>{}));
+      corePromises.push(this.trackPeerCore(value).catch(()=>{}));
     }
     await Promise.all(corePromises);
 
-    // Compact-encoding codec for the JSON app protocol. Built on cenc.string
-    // (utf-8) so it works regardless of whether this compact-encoding build
-    // ships a dedicated `json` codec.
     const appEncoding = {
       preencode(state, m) { cenc.string.preencode(state, JSON.stringify(m)); },
       encode(state, m) { cenc.string.encode(state, JSON.stringify(m)); },
       decode(state) { return JSON.parse(cenc.string.decode(state)); }
     };
 
-    // FIX: Explicitly create an ephemeral DHT instance to guarantee we don't route traffic for others
-    // Also limit maxPeers to protect cheap home routers from NAT exhaustion
     const dht = new DHT({ ephemeral: true });
+    
     this.swarm = new Hyperswarm({ 
-      keyPair: { publicKey, secretKey },
       dht,
       maxPeers: 24,
       maxClientConnections: 12,
@@ -574,20 +708,13 @@ class P2PNetwork {
     });
     
     this.swarm.on('connection', (conn, info) => {
-      conn.on('error', () => {}); // Prevent ECONNRESET crashes
+      conn.on('error', () => {}); 
       this.store.replicate(conn);
       const peerKey = b4a.toString(info.publicKey, 'hex');
 
-      // The hyperswarm connection is a Noise stream that corestore wraps in
-      // Protomux for replication framing. Raw conn.write would corrupt that
-      // mux, so the JSON app protocol rides on its own Protomux channel that
-      // shares the same connection with replication.
       const mux = Protomux.from(conn);
       const channel = mux.createChannel({ protocol: 'peercord/app' });
 
-      // createChannel returns null if a channel for this protocol already
-      // exists on the connection (e.g. a duplicate/multiplexed link). Bail
-      // gracefully but keep the connection alive for replication.
       if (!channel) {
         if (this.onPeerUpdate) this.onPeerUpdate(this.getPeerList());
         return;
@@ -596,7 +723,6 @@ class P2PNetwork {
       const appMessage = channel.addMessage({
         encoding: appEncoding,
         onmessage: (msg) => { 
-          // Intercept Account Sync Requests directly on the main swarm
           if (msg.type === 'ephemeral' && msg.payload?.type === 'account_sync_request') {
             try {
               const sigBuf = b4a.from(msg.payload.signature, 'hex');
@@ -605,8 +731,14 @@ class P2PNetwork {
               
               if (sodium.crypto_sign_verify_detached(sigBuf, msgBuf, pubBuf)) {
                 console.log("[Sync] Valid sync request received. Exporting account...");
+                if (this.onSyncEvent) this.onSyncEvent('started');
+                
                 this.exportAccount().then(exportData => {
                   send({ type: 'ephemeral', payload: { type: 'account_sync_reply', data: exportData } });
+                  if (this.onSyncEvent) this.onSyncEvent('completed');
+                }).catch(err => {
+                  console.error("Export failed:", err);
+                  if (this.onSyncEvent) this.onSyncEvent('error');
                 });
               }
             } catch (e) {
@@ -624,13 +756,12 @@ class P2PNetwork {
 
       channel.open();
 
-      // Preserve existing peer info if connection multiplexes
       const existingPeer = this.peers.get(peerKey);
       if (existingPeer) {
         existingPeer.conn = conn;
         existingPeer.send = send;
       } else {
-        this.peers.set(peerKey, { conn, send, displayName: 'Unknown', username: 'unknown', avatar: null, bio: '', connections: [], coreKey: null });
+        this.peers.set(peerKey, { conn, send, identityKey: peerKey, displayName: 'Unknown', username: 'unknown', avatar: null, bio: '', connections: [], coreKey: null });
       }
 
       const pendingTargets = Object.entries(this.dms)
@@ -639,6 +770,7 @@ class P2PNetwork {
 
       send({
         type: 'identity',
+        identityKey: this.myKey,
         displayName: this.displayName,
         username: this.username,
         avatar: this.avatar,
@@ -652,7 +784,6 @@ class P2PNetwork {
       if (this.onPeerUpdate) this.onPeerUpdate(this.getPeerList());
 
       conn.on('close', () => {
-        // Only delete if this specific connection is still the active one
         const currentPeer = this.peers.get(peerKey);
         if (currentPeer && currentPeer.conn === conn) {
           this.peers.delete(peerKey);
@@ -661,12 +792,9 @@ class P2PNetwork {
       });
     });
 
-    // BACKGROUND JOINS TO PREVENT UDP FLOOD / NAT EXHAUSTION
     (async () => {
-      // FIX: Increased pacing to 3 seconds to protect router NAT tables
       const pace = () => new Promise(r => setTimeout(r, 3000)); 
 
-      // Join the sync topic on the main swarm instead of creating a second swarm
       const syncTopic = b4a.alloc(32);
       sodium.crypto_generichash(syncTopic, b4a.from('peercord-sync:' + this.myKey));
       this.swarm.join(syncTopic, { server: true, client: false });
@@ -702,9 +830,14 @@ class P2PNetwork {
   }
 
   getPeerList() {
-    return Array.from(this.peers.entries()).map(([key, info]) => ({
-      key, displayName: info.displayName, username: info.username, avatar: info.avatar, bio: info.bio, connections: info.connections
-    }));
+    return Array.from(this.peers.values()).map(info => ({
+      key: info.identityKey || 'unknown', 
+      displayName: info.displayName, 
+      username: info.username, 
+      avatar: info.avatar, 
+      bio: info.bio, 
+      connections: info.connections
+    })).filter((v, i, a) => a.findIndex(t => t.key === v.key) === i); 
   }
 
   async _joinTopic(topicHex, skipFlush = false) {
@@ -714,17 +847,14 @@ class P2PNetwork {
     const topic = b4a.from(topicHex, 'hex');
     this.swarm.join(topic, { client: true, server: true });
     
-    // Debounce identity broadcast to prevent TCP floods when joining many topics
     if (this._identityTimeout) clearTimeout(this._identityTimeout);
     this._identityTimeout = setTimeout(() => {
       this._broadcastIdentity();
     }, 1000);
     
-    // Request sync from existing members to fetch history immediately
     this.sendEphemeral({ type: 'sync_request', topic: topicHex });
 
     if (!skipFlush) {
-      // Don't await flush, it blocks the caller.
       this.swarm.flush().catch(()=>{});
     }
   }
@@ -742,6 +872,8 @@ class P2PNetwork {
     if (this.localFilesDb) { await this.localFilesDb.close(); this.localFilesDb = null; }
     if (this.coresDb) { await this.coresDb.close(); this.coresDb = null; }
     if (this.profilesDb) { await this.profilesDb.close(); this.profilesDb = null; }
+    if (this.messageCacheDb) { await this.messageCacheDb.close(); this.messageCacheDb = null; }
+    if (this.reactionsDb) { await this.reactionsDb.close(); this.reactionsDb = null; }
     if (this.store) { await this.store.close(); this.store = null; }
     
     this.peers.clear();
@@ -860,6 +992,8 @@ class P2PNetwork {
       this.deletedMessages.add(msgId);
       this.messages.delete(msgId);
       this.reactions.delete(msgId);
+      if (this.messageCacheDb) await this.messageCacheDb.del(msgId);
+      if (this.reactionsDb) await this.reactionsDb.del(msgId);
       
       if (typeof window !== 'undefined') {
         const localDeleted = JSON.parse(localStorage.getItem('pear_local_deleted_msgs') || '[]');

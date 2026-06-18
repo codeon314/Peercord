@@ -33,6 +33,10 @@ export default function ServerSettingsModal({ onClose, activeServerObj, myKey, o
     const r = activeServerObj.roles?.find(role => role.id === rId);
     return r && r.permissions.includes('manage_channels');
   });
+  const canDeleteChannels = isServerAdmin || userRoles.some(rId => {
+    const r = activeServerObj.roles?.find(role => role.id === rId);
+    return r && (r.permissions.includes('delete_channels') || r.permissions.includes('manage_channels'));
+  });
   const canKickMembers = isServerAdmin || userRoles.some(rId => {
     const r = activeServerObj.roles?.find(role => role.id === rId);
     return r && r.permissions.includes('kick_members');
@@ -167,6 +171,24 @@ export default function ServerSettingsModal({ onClose, activeServerObj, myKey, o
         [channelName]: newRoles
       }
     });
+  };
+
+  const handleDeleteChannel = (chName, type) => {
+    if (window.confirm(`Are you sure you want to delete the ${type} channel "${chName}"?`)) {
+      const newChannels = { ...channels };
+      if (type === 'text') newChannels.text = newChannels.text.filter(c => c !== chName);
+      if (type === 'voice') newChannels.voice = newChannels.voice.filter(c => c !== chName);
+      
+      const newPerms = { ...newChannels.permissions };
+      delete newPerms[chName];
+      newChannels.permissions = newPerms;
+
+      const newSendPerms = { ...newChannels.send_permissions };
+      delete newSendPerms[chName];
+      newChannels.send_permissions = newSendPerms;
+
+      setChannels(newChannels);
+    }
   };
 
   const handleKickMember = (memberKey) => {
@@ -351,6 +373,10 @@ export default function ServerSettingsModal({ onClose, activeServerObj, myKey, o
                             <span className="text-sm text-text">Manage Channels</span>
                           </label>
                           <label className="flex items-center gap-3 cursor-pointer">
+                            <input type="checkbox" checked={editingRole.permissions.includes('delete_channels')} onChange={() => togglePermission('delete_channels')} className="w-4 h-4 accent-accent" />
+                            <span className="text-sm text-text">Delete Channels</span>
+                          </label>
+                          <label className="flex items-center gap-3 cursor-pointer">
                             <input type="checkbox" checked={editingRole.permissions.includes('manage_roles')} onChange={() => togglePermission('manage_roles')} className="w-4 h-4 accent-accent" />
                             <span className="text-sm text-text">Manage Roles</span>
                           </label>
@@ -479,9 +505,16 @@ export default function ServerSettingsModal({ onClose, activeServerObj, myKey, o
                                   {restrictedCount > 0 && <span className="text-[10px] bg-base px-1.5 py-0.5 rounded text-muted ml-2">Private ({restrictedCount} roles)</span>}
                                   {sendRestrictedCount > 0 && <span className="text-[10px] bg-base px-1.5 py-0.5 rounded text-muted ml-2">Read-Only ({sendRestrictedCount} roles)</span>}
                                 </div>
-                                <button onClick={() => setEditingChannel({ name: ch, type: 'text' })} className="text-muted hover:text-text text-xs px-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  Edit Permissions
-                                </button>
+                                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button onClick={() => setEditingChannel({ name: ch, type: 'text' })} className="text-muted hover:text-text text-xs px-2">
+                                    Edit
+                                  </button>
+                                  {canDeleteChannels && (
+                                    <button onClick={() => handleDeleteChannel(ch, 'text')} className="text-red-500 hover:text-red-400 text-xs px-2">
+                                      Delete
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             );
                           })}
@@ -500,9 +533,16 @@ export default function ServerSettingsModal({ onClose, activeServerObj, myKey, o
                                   <span className="text-sm font-medium text-text">{ch}</span>
                                   {restrictedCount > 0 && <span className="text-[10px] bg-base px-1.5 py-0.5 rounded text-muted ml-2">Private ({restrictedCount} roles)</span>}
                                 </div>
-                                <button onClick={() => setEditingChannel({ name: ch, type: 'voice' })} className="text-muted hover:text-text text-xs px-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  Edit Permissions
-                                </button>
+                                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button onClick={() => setEditingChannel({ name: ch, type: 'voice' })} className="text-muted hover:text-text text-xs px-2">
+                                    Edit
+                                  </button>
+                                  {canDeleteChannels && (
+                                    <button onClick={() => handleDeleteChannel(ch, 'voice')} className="text-red-500 hover:text-red-400 text-xs px-2">
+                                      Delete
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             );
                           })}

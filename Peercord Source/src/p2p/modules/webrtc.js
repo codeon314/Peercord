@@ -10,8 +10,9 @@ export function removeWebRTCListener(network, fn) {
 
 export function sendWebRTCSignal(network, targetKey, payload) {
   if (!network.swarm) return;
-  const peerInfo = network.peers.get(targetKey);
-  if (peerInfo && peerInfo.send) {
-    peerInfo.send({ type: 'ephemeral', payload });
+  for (const peer of network.peers.values()) {
+    if (peer.identityKey === targetKey && peer.send) {
+      peer.send({ type: 'ephemeral', payload });
+    }
   }
 }

@@ -19,7 +19,7 @@ export async function createServer(network, name, icon, allowAnyoneToInvite, isG
       id: 'admin', 
       name: 'Admin', 
       color: '#ff4444', 
-      permissions: ['admin', 'send_messages', 'read_messages', 'manage_channels', 'manage_roles', 'kick_members', 'send_files', 'add_reactions', 'mention_everyone'] 
+      permissions: ['admin', 'send_messages', 'read_messages', 'manage_channels', 'delete_channels', 'manage_roles', 'kick_members', 'send_files', 'add_reactions', 'mention_everyone'] 
     },
     { 
       id: 'role_members', 

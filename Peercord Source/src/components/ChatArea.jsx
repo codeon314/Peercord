@@ -342,6 +342,9 @@ export default function ChatArea({ activeView, activeChannel, setActiveChannel, 
     setReplyingTo(null);
     setMentionQuery(null);
     setMentionType(null);
+    setInputText('');
+    setAttachments([]);
+    setEditingId(null);
   },[activeChannel, activeView]);
 
   useEffect(() => {
@@ -699,6 +702,18 @@ export default function ChatArea({ activeView, activeChannel, setActiveChannel, 
       setAnimationTrigger(Date.now()); 
     }
   };
+
+  if (!isDMView && !activeChannel) {
+    return (
+      <div className="flex-1 flex flex-col bg-panel min-w-0 relative h-full items-center justify-center">
+        <div className="text-center">
+          <div className="w-20 h-20 bg-surface rounded-full mx-auto mb-4 flex items-center justify-center text-4xl text-muted">#</div>
+          <h2 className="text-xl font-bold text-text mb-2">No Channels Available</h2>
+          <p className="text-muted text-sm">You don't have access to any channels in this hub, or none exist.</p>
+        </div>
+      </div>
+    );
+  }
 
   const currentChannelMessages = messages.filter(m => {
     if (isDMView && !isGroupChat) return (m.sender === myKey && m.recipient === activeChannel) || (m.sender === activeChannel && m.recipient === myKey);
