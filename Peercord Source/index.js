@@ -171,6 +171,41 @@ async function boot() {
   
   win.loadURL('peercord://app/dist/index.html');
 
+  // Right-Click Spell Check Context Menu
+  win.webContents.on('context-menu', (event, params) => {
+    const menuTemplate = [];
+
+    if (params.dictionarySuggestions && params.dictionarySuggestions.length > 0) {
+      for (const suggestion of params.dictionarySuggestions) {
+        menuTemplate.push({
+          label: suggestion,
+          click: () => win.webContents.replaceMisspelling(suggestion)
+        });
+      }
+      menuTemplate.push({ type: 'separator' });
+    }
+
+    if (params.misspelledWord) {
+      menuTemplate.push({
+        label: 'Add to dictionary',
+        click: () => win.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord)
+      });
+      menuTemplate.push({ type: 'separator' });
+    }
+
+    if (params.isEditable) {
+      if (params.editFlags.canCut) menuTemplate.push({ role: 'cut' });
+      if (params.editFlags.canCopy) menuTemplate.push({ role: 'copy' });
+      if (params.editFlags.canPaste) menuTemplate.push({ role: 'paste' });
+    } else if (params.editFlags.canCopy) {
+      menuTemplate.push({ role: 'copy' });
+    }
+
+    if (menuTemplate.length > 0) {
+      Menu.buildFromTemplate(menuTemplate).popup();
+    }
+  });
+
   function updateTrayVisibility() {
     if (win.isVisible()) {
       if (tray) {

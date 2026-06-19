@@ -8,8 +8,57 @@ import remarkBreaks from 'remark-breaks';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
-const QUICK_EMOJIS = ['❤️', '😂', '💯', '🔥'];
-const ALL_EMOJIS = ['😀','😂','🤣','😊','😍','🥰','😎','🤩','😘','😗','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶','😏','😒','🙄','😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🤧','🥵','🥶','🥴','😵','🤯','🤠','🥳','😎','🤓','🧐','😕','😟','🙁','☹️','😮','😯','😲','😳','🥺','😦','😧','😨','😰','😥','😢','😭','😱','😖','😣','😞','😓','😩','😫','🥱','😤','😡','😠','🤬','😈','👿','💀','☠️','💩','🤡','👹','👺','👻','👽','👾','🤖','😺','😸','😹','😻','😼','😽','🙀','😿','😾','❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','👍','👎','👊','✊','🤛','🤜','🤞','✌️','🤟','🤘','👌','🤏','👈','👉','👆','👇','☝️','✋','🤚','🖐','🖖','👋','🤙','💪','🦾','🖕','✍️','🙏','🦶','🦵','🦿','💄','💋','👄','🦷','👅','👂','🦻','👃','👣','👁','👀','🧠','🗣','👤','👥','💯','💢','💥','💫','💦','💨','🕳','💣','💬','👁️‍🗨️','🗨️','🗯️','💭','💤'];
+const EMOJI_LIST = [
+  { char: '😀', name: 'grinning' }, { char: '😂', name: 'joy' }, { char: '🤣', name: 'rofl' },
+  { char: '😊', name: 'smile' }, { char: '😍', name: 'heart_eyes' }, { char: '🥰', name: 'hearts' },
+  { char: '😎', name: 'sunglasses' }, { char: '🤩', name: 'star_struck' }, { char: '😘', name: 'kissing_heart' },
+  { char: '😗', name: 'kissing' }, { char: '😋', name: 'yum' }, { char: '😛', name: 'stuck_out_tongue' },
+  { char: '😜', name: 'stuck_out_tongue_winking_eye' }, { char: '🤪', name: 'zany_face' }, { char: '😝', name: 'stuck_out_tongue_closed_eyes' },
+  { char: '🤑', name: 'money_mouth' }, { char: '🤗', name: 'hugs' }, { char: '🤭', name: 'hand_over_mouth' },
+  { char: '🤫', name: 'shushing' }, { char: '🤔', name: 'thinking' }, { char: '🤐', name: 'zipper_mouth' },
+  { char: '🤨', name: 'raised_eyebrow' }, { char: '😐', name: 'neutral_face' }, { char: '😑', name: 'expressionless' },
+  { char: '😶', name: 'no_mouth' }, { char: '😏', name: 'smirk' }, { char: '😒', name: 'unamused' },
+  { char: '🙄', name: 'roll_eyes' }, { char: '😬', name: 'grimacing' }, { char: '🤥', name: 'lying_face' },
+  { char: '😌', name: 'relieved' }, { char: '😔', name: 'pensive' }, { char: '😪', name: 'sleepy' },
+  { char: '🤤', name: 'drooling' }, { char: '😴', name: 'sleeping' }, { char: '😷', name: 'mask' },
+  { char: '🤒', name: 'thermometer_face' }, { char: '🤕', name: 'head_bandage' }, { char: '🤢', name: 'nauseated' },
+  { char: '🤮', name: 'vomiting' }, { char: '🤧', name: 'sneezing' }, { char: '🥵', name: 'hot_face' },
+  { char: '🥶', name: 'cold_face' }, { char: '🥴', name: 'woozy' }, { char: '😵', name: 'dizzy' },
+  { char: '🤯', name: 'exploding_head' }, { char: '🤠', name: 'cowboy' }, { char: '🥳', name: 'partying' },
+  { char: '🤓', name: 'nerd' }, { char: '🧐', name: 'monocle' }, { char: '😕', name: 'confused' },
+  { char: '😟', name: 'worried' }, { char: '🙁', name: 'slightly_frowning' }, { char: '☹️', name: 'frowning' },
+  { char: '😮', name: 'open_mouth' }, { char: '😯', name: 'hushed' }, { char: '😲', name: 'astonished' },
+  { char: '😳', name: 'flushed' }, { char: '🥺', name: 'pleading' }, { char: '😦', name: 'frowning_open_mouth' },
+  { char: '😧', name: 'anguished' }, { char: '😨', name: 'fearful' }, { char: '😰', name: 'cold_sweat' },
+  { char: '😥', name: 'disappointed_relieved' }, { char: '😢', name: 'cry' }, { char: '😭', name: 'sob' },
+  { char: '😱', name: 'scream' }, { char: '😖', name: 'confounded' }, { char: '😣', name: 'persevere' },
+  { char: '😞', name: 'disappointed' }, { char: '😓', name: 'sweat' }, { char: '😩', name: 'weary' },
+  { char: '😫', name: 'tired_face' }, { char: '🥱', name: 'yawning' }, { char: '😤', name: 'triumph' },
+  { char: '😡', name: 'pout' }, { char: '😠', name: 'angry' }, { char: '🤬', name: 'cursing' },
+  { char: '😈', name: 'smiling_imp' }, { char: '👿', name: 'imp' }, { char: '💀', name: 'skull' },
+  { char: '☠️', name: 'skull_crossbones' }, { char: '💩', name: 'poop' }, { char: '🤡', name: 'clown' },
+  { char: '👹', name: 'ogre' }, { char: '👺', name: 'goblin' }, { char: '👻', name: 'ghost' },
+  { char: '👽', name: 'alien' }, { char: '👾', name: 'space_invader' }, { char: '🤖', name: 'robot' },
+  { char: '❤️', name: 'heart' }, { char: '🧡', name: 'orange_heart' }, { char: '💛', name: 'yellow_heart' },
+  { char: '💚', name: 'green_heart' }, { char: '💙', name: 'blue_heart' }, { char: '💜', name: 'purple_heart' },
+  { char: '🖤', name: 'black_heart' }, { char: '🤍', name: 'white_heart' }, { char: '🤎', name: 'brown_heart' },
+  { char: '💔', name: 'broken_heart' }, { char: '❣️', name: 'heavy_heart_exclamation' }, { char: '💕', name: 'two_hearts' },
+  { char: '💞', name: 'revolving_hearts' }, { char: '💓', name: 'heartbeat' }, { char: '💗', name: 'heartpulse' },
+  { char: '💖', name: 'sparkling_heart' }, { char: '💘', name: 'cupid' }, { char: '💝', name: 'gift_heart' },
+  { char: '👍', name: 'thumbsup' }, { char: '👎', name: 'thumbsdown' }, { char: '👊', name: 'punch' },
+  { char: '✊', name: 'fist' }, { char: '🤛', name: 'left_facing_fist' }, { char: '🤜', name: 'right_facing_fist' },
+  { char: '🤞', name: 'crossed_fingers' }, { char: '✌️', name: 'v' }, { char: '🤟', name: 'love_you' },
+  { char: '🤘', name: 'metal' }, { char: '👌', name: 'ok_hand' }, { char: '🤏', name: 'pinching_hand' },
+  { char: '👈', name: 'point_left' }, { char: '👉', name: 'point_right' }, { char: '👆', name: 'point_up_2' },
+  { char: '👇', name: 'point_down' }, { char: '☝️', name: 'point_up' }, { char: '✋', name: 'hand' },
+  { char: '🤚', name: 'raised_back_of_hand' }, { char: '🖐', name: 'raised_hand_with_fingers_splayed' },
+  { char: '🖖', name: 'vulcan' }, { char: '👋', name: 'wave' }, { char: '🤙', name: 'call_me' },
+  { char: '💪', name: 'muscle' }, { char: '🖕', name: 'middle_finger' }, { char: '✍️', name: 'writing_hand' },
+  { char: '🙏', name: 'pray' }, { char: '💯', name: '100' }, { char: '💢', name: 'anger' },
+  { char: '💥', name: 'boom' }, { char: '💫', name: 'dizzy_symbol' }, { char: '💦', name: 'sweat_drops' },
+  { char: '💨', name: 'dash' }, { char: '💬', name: 'speech_balloon' }, { char: '💭', name: 'thought_balloon' },
+  { char: '💤', name: 'zzz' }, { char: '✨', name: 'sparkles' }, { char: '🔥', name: 'fire' }
+];
 
 const MarkdownComponents = {
   code({node, inline, className, children, ...props}) {
@@ -157,13 +206,19 @@ export default function ChatArea({ activeView, activeChannel, setActiveChannel, 
   const[expandedImage, setExpandedImage] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
   const [fullEmojiPicker, setFullEmojiPicker] = useState(null);
+  const [showInputEmojiPicker, setShowInputEmojiPicker] = useState(false);
   const [emojiPickerDirection, setEmojiPickerDirection] = useState('down');
   const [profileViewUser, setProfileViewUser] = useState(null);
   
-  const [mentionType, setMentionType] = useState(null); // 'user' | 'channel'
+  const [mentionType, setMentionType] = useState(null); // 'user' | 'channel' | 'emoji'
   const [mentionQuery, setMentionQuery] = useState(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [filteredMentions, setFilteredMentions] = useState([]);
+
+  const [recentEmojis, setRecentEmojis] = useState(() => {
+    const saved = localStorage.getItem('pear_recent_emojis');
+    return saved ? JSON.parse(saved) : ['❤️', '😂', '💯', '🔥'];
+  });
 
   const [showCrypto, setShowCrypto] = useState(false);
   const [liveDecryption, setLiveDecryption] = useState(localStorage.getItem('pear_live_decryption') === 'true');
@@ -351,10 +406,11 @@ export default function ChatArea({ activeView, activeChannel, setActiveChannel, 
     const handleClick = () => {
       setContextMenu(null);
       setFullEmojiPicker(null);
+      setShowInputEmojiPicker(false);
     };
-    if (contextMenu || fullEmojiPicker) document.addEventListener('click', handleClick);
+    if (contextMenu || fullEmojiPicker || showInputEmojiPicker) document.addEventListener('click', handleClick);
     return () => document.removeEventListener('click', handleClick);
-  }, [contextMenu, fullEmojiPicker]);
+  }, [contextMenu, fullEmojiPicker, showInputEmojiPicker]);
 
   useEffect(() => {
     const handleJump = (e) => {
@@ -472,6 +528,10 @@ export default function ChatArea({ activeView, activeChannel, setActiveChannel, 
         } else {
           setFilteredMentions([]);
         }
+      } else if (mentionType === 'emoji') {
+        const query = mentionQuery.toLowerCase();
+        const filtered = EMOJI_LIST.filter(e => e.name.includes(query)).slice(0, 10);
+        setFilteredMentions(filtered);
       }
       setMentionIndex(0);
     }
@@ -521,6 +581,7 @@ export default function ChatArea({ activeView, activeChannel, setActiveChannel, 
     
     const userMatch = textBeforeCursor.match(/(^|\s)@([a-zA-Z0-9_.]*)$/);
     const channelMatch = textBeforeCursor.match(/(^|\s)#([a-z0-9-]*)$/);
+    const emojiMatch = textBeforeCursor.match(/(^|\s):([a-z0-9_]+)$/i);
 
     if (userMatch) {
       setMentionType('user');
@@ -528,6 +589,9 @@ export default function ChatArea({ activeView, activeChannel, setActiveChannel, 
     } else if (channelMatch && !isDMView) {
       setMentionType('channel');
       setMentionQuery(channelMatch[2]);
+    } else if (emojiMatch) {
+      setMentionType('emoji');
+      setMentionQuery(emojiMatch[2]);
     } else {
       setMentionType(null);
       setMentionQuery(null);
@@ -537,6 +601,31 @@ export default function ChatArea({ activeView, activeChannel, setActiveChannel, 
     if (now - lastTypingTime.current > 2000) {
       network.sendTyping(networkChannelId);
       lastTypingTime.current = now;
+    }
+  };
+
+  const handleEmojiSelect = (emoji, isReaction = false, msgId = null) => {
+    if (isReaction && msgId) {
+      const newRecents = [emoji, ...recentEmojis.filter(e => e !== emoji)].slice(0, 4);
+      setRecentEmojis(newRecents);
+      localStorage.setItem('pear_recent_emojis', JSON.stringify(newRecents));
+
+      network.sendReaction(msgId, emoji, isDMView && !isGroupChat, activeChannel);
+      setFullEmojiPicker(null);
+      setContextMenu(null);
+    } else {
+      const cursor = textareaRef.current?.selectionStart || inputText.length;
+      const textBefore = inputText.slice(0, cursor);
+      const textAfter = inputText.slice(cursor);
+      setInputText(textBefore + emoji + textAfter);
+      setShowInputEmojiPicker(false);
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          textareaRef.current.selectionStart = cursor + emoji.length;
+          textareaRef.current.selectionEnd = cursor + emoji.length;
+        }
+      }, 0);
     }
   };
 
@@ -568,6 +657,22 @@ export default function ChatArea({ activeView, activeChannel, setActiveChannel, 
         setInputText(newTextBefore + textAfterCursor);
         setMentionQuery(null);
         setMentionType(null);
+        setTimeout(() => {
+          if (textareaRef.current) {
+            textareaRef.current.focus();
+            textareaRef.current.selectionStart = newTextBefore.length;
+            textareaRef.current.selectionEnd = newTextBefore.length;
+          }
+        }, 0);
+      }
+    } else if (mentionType === 'emoji') {
+      const match = textBeforeCursor.match(/(^|\s):([a-z0-9_]+)$/i);
+      if (match) {
+        const newTextBefore = textBeforeCursor.slice(0, match.index) + match[1] + item.char + ' ';
+        setInputText(newTextBefore + textAfterCursor);
+        setMentionQuery(null);
+        setMentionType(null);
+        
         setTimeout(() => {
           if (textareaRef.current) {
             textareaRef.current.focus();
@@ -843,13 +948,10 @@ export default function ChatArea({ activeView, activeChannel, setActiveChannel, 
           >
             {canReact && (
               <div className="flex justify-between px-3 py-1.5 border-b border-surface mb-1">
-                {QUICK_EMOJIS.map(emoji => (
+                {recentEmojis.map(emoji => (
                   <button 
                     key={emoji} 
-                    onClick={() => {
-                      network.sendReaction(contextMenu.msg.id, emoji, isDMView && !isGroupChat, activeChannel);
-                      setContextMenu(null);
-                    }}
+                    onClick={() => handleEmojiSelect(emoji, true, contextMenu.msg.id)}
                     className="hover:bg-surface rounded p-1 transition-colors"
                   >
                     {emoji}
@@ -995,7 +1097,7 @@ export default function ChatArea({ activeView, activeChannel, setActiveChannel, 
       <div className="flex-1 p-4 overflow-y-auto flex flex-col" ref={chatContainerRef}>
         <div className="mt-auto"></div>
         <div className="text-center my-8">
-          <div className="w-20 h-20 bg-surface rounded-full mx-auto mb-4 flex items-center justify-center text-4xl text-text">{headerIcon}</div>
+          <div className="w-20 h-20 bg-surface rounded-full mx-auto mb-4 flex items-center justify-center text-4xl text-muted">{headerIcon}</div>
           <h1 className="text-3xl font-bold text-text mb-2">{isGroupChat ? `Welcome to ${headerName}!` : (isDMView ? headerName : `Welcome to #${headerName}!`)}</h1>
           <p className="text-muted">
             {isGroupChat ? `This is the beginning of your group whisper history.` : (isDMView ? `This is the beginning of your whisper history with ${headerName}.` : `This is the start of the decentralized #${headerName} room.`)}
@@ -1061,12 +1163,12 @@ export default function ChatArea({ activeView, activeChannel, setActiveChannel, 
                 {/* Actions for IRC Mode */}
                 <div className={`absolute right-4 -top-3 flex flex-col items-end ${fullEmojiPicker === msg.id ? 'opacity-100 z-50' : (fullEmojiPicker ? 'opacity-0 pointer-events-none z-10' : 'opacity-0 group-hover/msg:opacity-100 z-10')}`}>
                   <div className="flex items-center bg-surface border border-panel rounded-md shadow-sm overflow-hidden">
-                    {canReact && QUICK_EMOJIS.map(emoji => (
+                    {canReact && recentEmojis.map(emoji => (
                       <button
                         key={emoji}
                         onClick={(e) => {
                           e.stopPropagation();
-                          network.sendReaction(msg.id, emoji, isDMView && !isGroupChat, activeChannel);
+                          handleEmojiSelect(emoji, true, msg.id);
                         }}
                         className="hover:bg-panel p-1.5 transition-colors text-base"
                         title="React"
@@ -1107,17 +1209,17 @@ export default function ChatArea({ activeView, activeChannel, setActiveChannel, 
                   </div>
                   {fullEmojiPicker === msg.id && (
                     <div className={`absolute right-0 ${emojiPickerDirection === 'up' ? 'bottom-full mb-1' : 'top-full mt-1'} bg-panel border border-surface rounded shadow-xl p-2 w-64 h-48 overflow-y-auto custom-scrollbar z-50 grid grid-cols-6 gap-1`} onClick={e => e.stopPropagation()}>
-                      {ALL_EMOJIS.map(emoji => (
+                      {EMOJI_LIST.map(e => (
                         <button
-                          key={emoji}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            network.sendReaction(msg.id, emoji, isDMView && !isGroupChat, activeChannel);
-                            setFullEmojiPicker(null);
+                          key={e.char}
+                          onClick={(ev) => {
+                            ev.stopPropagation();
+                            handleEmojiSelect(e.char, true, msg.id);
                           }}
                           className="hover:bg-surface rounded p-1 text-lg transition-colors"
+                          title={`:${e.name}:`}
                         >
-                          {emoji}
+                          {e.char}
                         </button>
                       ))}
                     </div>
@@ -1193,6 +1295,7 @@ export default function ChatArea({ activeView, activeChannel, setActiveChannel, 
                           value={editInput} 
                           onChange={handleEditChange} 
                           onKeyDown={(e) => handleEditMessage(e, msg.id)} 
+                          onContextMenu={(e) => e.stopPropagation()}
                           className="w-full bg-base text-text rounded p-2 outline-none resize-none max-h-[50vh] custom-scrollbar border border-surface" 
                           rows={1}
                         />
@@ -1343,12 +1446,12 @@ export default function ChatArea({ activeView, activeChannel, setActiveChannel, 
                 {/* Actions */}
                 <div className={`absolute right-4 -top-3 flex flex-col items-end ${fullEmojiPicker === msg.id ? 'opacity-100 z-50' : (fullEmojiPicker ? 'opacity-0 pointer-events-none z-10' : 'opacity-0 group-hover/msg:opacity-100 z-10')}`}>
                   <div className="flex items-center bg-surface border border-panel rounded-md shadow-sm overflow-hidden">
-                    {canReact && QUICK_EMOJIS.map(emoji => (
+                    {canReact && recentEmojis.map(emoji => (
                       <button
                         key={emoji}
                         onClick={(e) => {
                           e.stopPropagation();
-                          network.sendReaction(msg.id, emoji, isDMView && !isGroupChat, activeChannel);
+                          handleEmojiSelect(emoji, true, msg.id);
                         }}
                         className="hover:bg-panel p-1.5 transition-colors text-base"
                         title="React"
@@ -1389,17 +1492,17 @@ export default function ChatArea({ activeView, activeChannel, setActiveChannel, 
                   </div>
                   {fullEmojiPicker === msg.id && (
                     <div className={`absolute right-0 ${emojiPickerDirection === 'up' ? 'bottom-full mb-1' : 'top-full mt-1'} bg-panel border border-surface rounded shadow-xl p-2 w-64 h-48 overflow-y-auto custom-scrollbar z-50 grid grid-cols-6 gap-1`} onClick={e => e.stopPropagation()}>
-                      {ALL_EMOJIS.map(emoji => (
+                      {EMOJI_LIST.map(e => (
                         <button
-                          key={emoji}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            network.sendReaction(msg.id, emoji, isDMView && !isGroupChat, activeChannel);
-                            setFullEmojiPicker(null);
+                          key={e.char}
+                          onClick={(ev) => {
+                            ev.stopPropagation();
+                            handleEmojiSelect(e.char, true, msg.id);
                           }}
                           className="hover:bg-surface rounded p-1 text-lg transition-colors"
+                          title={`:${e.name}:`}
                         >
-                          {emoji}
+                          {e.char}
                         </button>
                       ))}
                     </div>
@@ -1422,12 +1525,12 @@ export default function ChatArea({ activeView, activeChannel, setActiveChannel, 
         {mentionQuery !== null && filteredMentions.length > 0 && (
           <div className="absolute bottom-full left-4 mb-2 w-64 bg-panel border border-surface rounded-lg shadow-xl overflow-hidden z-50">
             <div className="bg-surface px-3 py-1.5 text-xs font-bold text-muted uppercase border-b border-panel">
-              {mentionType === 'channel' ? 'Channels' : 'Members'}
+              {mentionType === 'channel' ? 'Channels' : mentionType === 'emoji' ? 'Emojis' : 'Members'}
             </div>
             <div className="max-h-48 overflow-y-auto custom-scrollbar">
               {filteredMentions.map((item, i) => (
                 <div 
-                  key={item.isChannel ? item.name : item.username} 
+                  key={item.isChannel ? item.name : (item.char || item.username)} 
                   onClick={() => insertMention(item)}
                   className={`flex items-center gap-2 px-3 py-2 cursor-pointer ${i === mentionIndex ? 'bg-accent/20' : 'hover:bg-surface'}`}
                 >
@@ -1440,6 +1543,11 @@ export default function ChatArea({ activeView, activeChannel, setActiveChannel, 
                         <span className="text-sm font-bold text-text truncate">{item.name}</span>
                         <span className="text-[10px] text-muted truncate">{item.type === 'text' ? 'Text Channel' : 'Voice Channel'}</span>
                       </div>
+                    </>
+                  ) : item.char ? (
+                    <>
+                      <span className="text-xl">{item.char}</span>
+                      <span className="text-sm font-medium text-text">:{item.name}:</span>
                     </>
                   ) : (
                     <>
@@ -1515,6 +1623,37 @@ export default function ChatArea({ activeView, activeChannel, setActiveChannel, 
             disabled={!canPost || !myKey}
             rows={1}
           />
+
+          <div className="relative shrink-0">
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowInputEmojiPicker(!showInputEmojiPicker);
+              }}
+              className="w-6 h-6 rounded-full text-muted hover:text-text flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={!canPost || !myKey}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg>
+            </button>
+            
+            {showInputEmojiPicker && (
+              <div 
+                className="absolute bottom-full right-0 mb-2 bg-panel border border-surface rounded shadow-xl p-2 w-64 h-48 overflow-y-auto custom-scrollbar z-50 grid grid-cols-6 gap-1"
+                onClick={e => e.stopPropagation()}
+              >
+                {EMOJI_LIST.map(e => (
+                  <button
+                    key={e.char}
+                    onClick={() => handleEmojiSelect(e.char)}
+                    className="hover:bg-surface rounded p-1 text-lg transition-colors"
+                    title={`:${e.name}:`}
+                  >
+                    {e.char}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

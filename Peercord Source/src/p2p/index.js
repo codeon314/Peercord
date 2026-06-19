@@ -539,8 +539,17 @@ class P2PNetwork {
       }
     }
 
-    this.store = new Corestore(this.storagePath);
-    await this.store.ready();
+    try {
+      this.store = new Corestore(this.storagePath);
+      await this.store.ready();
+    } catch (err) {
+      if (err.message && err.message.includes('Unsupported version')) {
+        if (typeof window !== 'undefined') {
+          alert(`Storage Format Mismatch!\n\nYour local data was created by a newer version of the app and cannot be read.\n\nPlease delete the following folder to start fresh:\n${this.storagePath}`);
+        }
+      }
+      throw err;
+    }
 
     const dbCore = this.store.get({ name: 'dm-db' }); await dbCore.ready();
     this.db = new Hyperbee(dbCore, { keyEncoding: 'utf-8', valueEncoding: 'json' }); await this.db.ready();

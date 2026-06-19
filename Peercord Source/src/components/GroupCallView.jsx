@@ -2,6 +2,61 @@ import React, { useEffect, useRef, useState } from 'react';
 import { network } from '../p2p/index.js';
 import ScreenShareModal from './ScreenShareModal.jsx';
 
+const playSound = (type) => {
+  try {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const now = audioCtx.currentTime;
+    
+    const beep = (freq, startTime, duration, vol = 0.1, oscType = 'sine') => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = oscType;
+      osc.frequency.setValueAtTime(freq, startTime);
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(vol, startTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(startTime);
+      osc.stop(startTime + duration);
+    };
+
+    switch (type) {
+      case 'join':
+        beep(440, now, 0.15);
+        beep(554.37, now + 0.15, 0.15);
+        beep(659.25, now + 0.3, 0.3);
+        break;
+      case 'leave':
+        beep(659.25, now, 0.15);
+        beep(554.37, now + 0.15, 0.15);
+        beep(440, now + 0.3, 0.3);
+        break;
+      case 'mute':
+      case 'deafen':
+        beep(440, now, 0.1, 0.05, 'triangle');
+        beep(349.23, now + 0.1, 0.1, 0.05, 'triangle');
+        break;
+      case 'unmute':
+      case 'undeafen':
+        beep(349.23, now, 0.1, 0.05, 'triangle');
+        beep(440, now + 0.1, 0.1, 0.05, 'triangle');
+        break;
+      case 'start_video':
+      case 'start_screen':
+        beep(523.25, now, 0.1, 0.05, 'square');
+        beep(659.25, now + 0.1, 0.2, 0.05, 'square');
+        break;
+      case 'stop_video':
+      case 'stop_screen':
+        beep(659.25, now, 0.1, 0.05, 'square');
+        beep(523.25, now + 0.1, 0.2, 0.05, 'square');
+        break;
+    }
+    setTimeout(() => audioCtx.close(), 1000);
+  } catch (e) {}
+};
+
 const VideoPlayer = ({ stream, muted, deafened, isAudioOnly }) => {
   const ref = useRef();
   useEffect(() => {
@@ -43,6 +98,11 @@ export default function GroupCallView({ channel, serverTopicHex, vcChannelId, my
   const localCameraStreamRef = useRef(null);
   const audioCtxRef = useRef(null);
   const animationFrameRef = useRef(null);
+
+  useEffect(() => {
+    playSound('join');
+    return () => playSound('leave');
+  }, []);
 
   // Broadcast VC state to the server swarm if this is a server VC
   useEffect(() => {
@@ -346,6 +406,7 @@ export default function GroupCallView({ channel, serverTopicHex, vcChannelId, my
       if (audioTrack) {
         audioTrack.enabled = !audioTrack.enabled;
         setIsMuted(!audioTrack.enabled);
+        playSound(!audioTrack.enabled ? 'mute' : 'unmute');
       }
     }
   };
@@ -353,6 +414,7 @@ export default function GroupCallView({ channel, serverTopicHex, vcChannelId, my
   const toggleDeafen = () => {
     const newDeafened = !isDeafened;
     setIsDeafened(newDeafened);
+    playSound(newDeafened ? 'deafen' : 'undeafen');
     
     if (newDeafened) {
       if (!isMuted && localStreamRef.current) {
@@ -385,6 +447,7 @@ export default function GroupCallView({ channel, serverTopicHex, vcChannelId, my
         localCameraStreamRef.current = null;
       }
       setIsVideoOn(false);
+      playSound('stop_video');
     } else {
       try {
         const videoInputId = localStorage.getItem('pear_video_input');
@@ -397,6 +460,7 @@ export default function GroupCallView({ channel, serverTopicHex, vcChannelId, my
           pc.addTrack(track, stream);
         });
         setIsVideoOn(true);
+        playSound('start_video');
       } catch (err) {
         console.error("Failed to start video", err);
       }
@@ -463,6 +527,7 @@ export default function GroupCallView({ channel, serverTopicHex, vcChannelId, my
 
       localScreenStreamRef.current = stream;
       setIsScreenSharing(true); 
+      playSound('start_screen');
 
       Object.values(pcs.current).forEach(pc => {
         if (videoTrack) {
@@ -526,6 +591,7 @@ export default function GroupCallView({ channel, serverTopicHex, vcChannelId, my
     }
     
     setIsScreenSharing(false);
+    playSound('stop_screen');
     
     if (expandedStreamId === 'local-screen') {
       setExpandedStreamId(null);
