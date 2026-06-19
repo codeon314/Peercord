@@ -377,6 +377,11 @@ export default function CallView({ targetKey, targetProfile, myProfile, isCaller
       if (peerKey !== targetKey) return;
       
       try {
+        if (payload.type === 'webrtc-action') {
+          playSound(payload.action);
+          return;
+        }
+
         if (!pcRef.current && payload.type !== 'voice_activity') {
           pendingSignals.current.push(payload);
           return;
@@ -404,7 +409,9 @@ export default function CallView({ targetKey, targetProfile, myProfile, isCaller
       if (audioTrack) {
         audioTrack.enabled = !audioTrack.enabled;
         setIsMuted(!audioTrack.enabled);
-        playSound(!audioTrack.enabled ? 'mute' : 'unmute');
+        const action = !audioTrack.enabled ? 'mute' : 'unmute';
+        playSound(action);
+        network.sendWebRTCSignal(targetKey, { type: 'webrtc-action', action });
       }
     }
   };
@@ -412,7 +419,9 @@ export default function CallView({ targetKey, targetProfile, myProfile, isCaller
   const toggleDeafen = () => {
     const newDeafened = !isDeafened;
     setIsDeafened(newDeafened);
-    playSound(newDeafened ? 'deafen' : 'undeafen');
+    const action = newDeafened ? 'deafen' : 'undeafen';
+    playSound(action);
+    network.sendWebRTCSignal(targetKey, { type: 'webrtc-action', action });
     
     if (newDeafened) {
       if (!isMuted && localStreamRef.current) {
@@ -444,6 +453,7 @@ export default function CallView({ targetKey, targetProfile, myProfile, isCaller
       }
       setIsVideoOn(false);
       playSound('stop_video');
+      network.sendWebRTCSignal(targetKey, { type: 'webrtc-action', action: 'stop_video' });
       
       if (pcRef.current && pcRef.current.signalingState !== 'closed') {
         const offer = await pcRef.current.createOffer();
@@ -466,6 +476,7 @@ export default function CallView({ targetKey, targetProfile, myProfile, isCaller
         }
         setIsVideoOn(true);
         playSound('start_video');
+        network.sendWebRTCSignal(targetKey, { type: 'webrtc-action', action: 'start_video' });
       } catch (err) {
         console.error("Failed to start video", err);
       }
@@ -533,6 +544,7 @@ export default function CallView({ targetKey, targetProfile, myProfile, isCaller
       localScreenStreamRef.current = stream;
       setIsScreenSharing(true); 
       playSound('start_screen');
+      network.sendWebRTCSignal(targetKey, { type: 'webrtc-action', action: 'start_screen' });
 
       if (pcRef.current) {
         if (videoTrack) {
@@ -607,6 +619,7 @@ export default function CallView({ targetKey, targetProfile, myProfile, isCaller
     setIsScreenSharing(false);
     setIsFullscreen(false);
     playSound('stop_screen');
+    network.sendWebRTCSignal(targetKey, { type: 'webrtc-action', action: 'stop_screen' });
     
     if (pcRef.current && pcRef.current.signalingState !== 'closed') {
       try {

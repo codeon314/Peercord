@@ -320,6 +320,7 @@ export default function GroupCallView({ channel, serverTopicHex, vcChannelId, my
       if (payload.channel !== channel) return;
 
       if (payload.type === 'webrtc-group-join' && peerKey !== myKey) {
+        playSound('join');
         if (!pcs.current[peerKey]) createPC(peerKey);
         // Send a ping back so the other peer knows we are here if they joined earlier
         network.sendEphemeral({ type: 'webrtc-group-hello', channel, target: peerKey });
@@ -328,6 +329,7 @@ export default function GroupCallView({ channel, serverTopicHex, vcChannelId, my
         if (!pcs.current[peerKey]) createPC(peerKey);
       }
       else if (payload.type === 'webrtc-group-leave') {
+        playSound('leave');
         if (pcs.current[peerKey]) {
           pcs.current[peerKey].close();
           delete pcs.current[peerKey];
@@ -337,6 +339,11 @@ export default function GroupCallView({ channel, serverTopicHex, vcChannelId, my
           delete next[peerKey];
           return next;
         });
+      }
+      else if (payload.type === 'webrtc-group-action') {
+        if (peerKey !== myKey) {
+          playSound(payload.action);
+        }
       }
       else if (payload.type === 'webrtc-group-voice') {
         setPeers(prev => {
@@ -406,7 +413,9 @@ export default function GroupCallView({ channel, serverTopicHex, vcChannelId, my
       if (audioTrack) {
         audioTrack.enabled = !audioTrack.enabled;
         setIsMuted(!audioTrack.enabled);
-        playSound(!audioTrack.enabled ? 'mute' : 'unmute');
+        const action = !audioTrack.enabled ? 'mute' : 'unmute';
+        playSound(action);
+        network.sendEphemeral({ type: 'webrtc-group-action', channel, action });
       }
     }
   };
@@ -414,7 +423,9 @@ export default function GroupCallView({ channel, serverTopicHex, vcChannelId, my
   const toggleDeafen = () => {
     const newDeafened = !isDeafened;
     setIsDeafened(newDeafened);
-    playSound(newDeafened ? 'deafen' : 'undeafen');
+    const action = newDeafened ? 'deafen' : 'undeafen';
+    playSound(action);
+    network.sendEphemeral({ type: 'webrtc-group-action', channel, action });
     
     if (newDeafened) {
       if (!isMuted && localStreamRef.current) {
@@ -448,6 +459,7 @@ export default function GroupCallView({ channel, serverTopicHex, vcChannelId, my
       }
       setIsVideoOn(false);
       playSound('stop_video');
+      network.sendEphemeral({ type: 'webrtc-group-action', channel, action: 'stop_video' });
     } else {
       try {
         const videoInputId = localStorage.getItem('pear_video_input');
@@ -461,6 +473,7 @@ export default function GroupCallView({ channel, serverTopicHex, vcChannelId, my
         });
         setIsVideoOn(true);
         playSound('start_video');
+        network.sendEphemeral({ type: 'webrtc-group-action', channel, action: 'start_video' });
       } catch (err) {
         console.error("Failed to start video", err);
       }
@@ -528,6 +541,7 @@ export default function GroupCallView({ channel, serverTopicHex, vcChannelId, my
       localScreenStreamRef.current = stream;
       setIsScreenSharing(true); 
       playSound('start_screen');
+      network.sendEphemeral({ type: 'webrtc-group-action', channel, action: 'start_screen' });
 
       Object.values(pcs.current).forEach(pc => {
         if (videoTrack) {
@@ -592,6 +606,7 @@ export default function GroupCallView({ channel, serverTopicHex, vcChannelId, my
     
     setIsScreenSharing(false);
     playSound('stop_screen');
+    network.sendEphemeral({ type: 'webrtc-group-action', channel, action: 'stop_screen' });
     
     if (expandedStreamId === 'local-screen') {
       setExpandedStreamId(null);
